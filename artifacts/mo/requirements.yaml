@@ -1,0 +1,11 @@
+packages:
+  "framer-motion": "For fluid, luxury micro-interactions and state transitions"
+  "clsx": "For conditional tailwind class merging"
+  "tailwind-merge": "For merging tailwind classes safely"
+
+images: []
+
+notes:
+  - "The app relies on the browser's native Web Speech API (SpeechRecognition). It will prompt the user for microphone permissions."
+  - "The backend API calls use the generated React Query hooks from @workspace/api-client-react."
+  - "Audio is played automatically using the HTML5 Audio API once the Blob is returned from the /api/mo/speak endpoint."

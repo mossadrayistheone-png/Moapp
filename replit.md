@@ -16,6 +16,26 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Artifacts
+
+### `artifacts/mo` (`@workspace/mo`) — Mo: AI Voice Assistant
+- React + Vite web app, served at `/`
+- Full voice flow: browser Web Speech API → OpenAI GPT-4o-mini → ElevenLabs TTS
+- State machine: idle → listening → thinking → speaking
+- Black and gold luxury design
+- Key files: `src/pages/Home.tsx`, `src/components/MicButton.tsx`, `src/hooks/use-voice-assistant.ts`
+- Uses `@workspace/api-client-react` hooks (`useMoChat`, `useMoSpeak`)
+
+### API Routes (in `artifacts/api-server`)
+- `POST /api/mo/chat` — receives `{ message }`, returns `{ reply }` via OpenAI
+- `POST /api/mo/speak` — receives `{ text }`, returns `audio/mpeg` blob via ElevenLabs
+- Route file: `artifacts/api-server/src/routes/mo.ts`
+
+### Required Secrets
+- `OPENAI_API_KEY` — OpenAI API key
+- `ELEVENLABS_API_KEY` — ElevenLabs API key
+- `ELEVENLABS_VOICE_ID` — ElevenLabs voice ID
+
 ## Structure
 
 ```text

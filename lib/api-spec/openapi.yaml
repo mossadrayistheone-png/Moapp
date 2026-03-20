@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Mo AI Voice Assistant API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: mo
+    description: Mo AI voice assistant operations
 paths:
   /healthz:
     get:
@@ -24,6 +25,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /mo/chat:
+    post:
+      operationId: moChat
+      tags: [mo]
+      summary: Send a message to Mo
+      description: Sends user text to OpenAI and returns Mo's response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Mo's response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /mo/speak:
+    post:
+      operationId: moSpeak
+      tags: [mo]
+      summary: Convert text to speech via ElevenLabs
+      description: Converts the given text to audio using ElevenLabs TTS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakRequest"
+      responses:
+        "200":
+          description: Audio stream (mpeg)
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +85,34 @@ components:
           type: string
       required:
         - status
-
+    ChatRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          description: The user's spoken message
+      required:
+        - message
+    ChatResponse:
+      type: object
+      properties:
+        reply:
+          type: string
+          description: Mo's response text
+      required:
+        - reply
+    SpeakRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Text to convert to speech
+      required:
+        - text
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

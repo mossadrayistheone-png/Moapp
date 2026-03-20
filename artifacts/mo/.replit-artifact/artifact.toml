@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Mo — AI Voice Assistant"
+version = "1.0.0"
+id = "artifacts/mo"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25629
+
+[services.development]
+run = "pnpm --filter @workspace/mo run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/mo", "run", "build" ]
+publicDir = "artifacts/mo/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25629"
+BASE_PATH = "/"
