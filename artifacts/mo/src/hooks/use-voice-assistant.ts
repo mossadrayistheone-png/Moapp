@@ -104,7 +104,9 @@ export function useVoiceAssistant() {
         audioRef.current.pause();
       }
 
-      // 3. Play audio
+      // 3. Brief natural pause before speaking
+      await new Promise(resolve => setTimeout(resolve, 650));
+
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
 

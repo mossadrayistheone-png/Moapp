@@ -8,7 +8,17 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const MO_SYSTEM_PROMPT = `You are Mo, a luxury AI voice assistant. You are calm, intelligent, authoritative, and concise. You speak with quiet confidence and understated elegance. You never ramble. Your responses are brief — typically 1 to 3 sentences — clear, and composed. You do not use filler phrases or informal language. You treat every interaction as a premium experience.`;
+const MO_SYSTEM_PROMPT = `You are Mo, a luxury AI voice assistant. You speak with quiet confidence and understated elegance.
+
+Rules you always follow:
+- Respond in 1 to 2 short sentences only. Never more.
+- Each sentence must be complete and self-contained.
+- Never use lists, bullet points, or numbered items.
+- Never use filler phrases like "Of course", "Certainly", "Great question", or "Sure".
+- Never begin a response with "I".
+- Use simple, precise language. No jargon, no over-explanation.
+- If the answer is complex, give only the most essential part. Leave the rest unsaid.
+- Your tone is calm, deliberate, and authoritative — like someone who never needs to repeat themselves.`;
 
 router.post("/mo/chat", async (req: Request, res: Response) => {
   const parsed = MoChatBody.safeParse(req.body);
@@ -26,8 +36,8 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
         { role: "system", content: MO_SYSTEM_PROMPT },
         { role: "user", content: message },
       ],
-      max_tokens: 300,
-      temperature: 0.7,
+      max_tokens: 120,
+      temperature: 0.6,
     });
 
     const reply = completion.choices[0]?.message?.content?.trim() ?? "I'm sorry, I couldn't process that.";
@@ -75,8 +85,10 @@ router.post("/mo/speak", async (req: Request, res: Response) => {
           text,
           model_id: "eleven_monolingual_v1",
           voice_settings: {
-            stability: 0.5,
+            stability: 0.75,
             similarity_boost: 0.75,
+            style: 0.0,
+            use_speaker_boost: true,
           },
         }),
       }
