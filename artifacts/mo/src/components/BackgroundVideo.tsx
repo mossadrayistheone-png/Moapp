@@ -28,19 +28,19 @@ export function BackgroundVideo() {
         muted
         playsInline
         preload="auto"
-        className="absolute inset-0 w-full h-full object-cover scale-105 blur-[2px]"
+        className="absolute inset-0 w-full h-full object-cover scale-105 blur-[1px]"
         style={{ willChange: "transform" }}
       />
 
-      {/* Dark overlay */}
-      <div className="absolute inset-0 bg-black/80" />
+      {/* Light base overlay — keeps it cinematic without killing the image */}
+      <div className="absolute inset-0 bg-black/40" />
 
-      {/* Subtle vignette to push edges darker */}
+      {/* Vignette — darkens edges only, centre stays open */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%)",
+            "radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%)",
         }}
       />
     </div>

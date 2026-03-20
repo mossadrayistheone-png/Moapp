@@ -47,7 +47,9 @@ export default function Home() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-3xl mx-auto flex flex-col items-center justify-center p-6 sm:p-12 z-10 relative mt-16 mb-32">
+      <main className="flex-1 w-full max-w-3xl mx-auto flex flex-col items-center justify-center p-6 sm:p-12 z-10 relative mt-16 mb-32"
+        style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, transparent 80%)" }}
+      >
         
         {/* Dynamic Text Area (User Transcript or AI Reply) */}
         <div className="flex-1 w-full flex flex-col justify-end items-center text-center mb-12 min-h-[200px]">
@@ -91,7 +93,9 @@ export default function Home() {
       </main>
 
       {/* Bottom Control Area */}
-      <div className="absolute bottom-12 w-full flex flex-col items-center justify-end z-20">
+      <div className="absolute bottom-0 w-full flex flex-col items-center justify-end z-20 pb-12 pt-24"
+        style={{ background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.5) 50%, transparent 100%)" }}
+      >
 
         {/* Mode Switcher */}
         <div className="flex items-center gap-6 mb-8">
