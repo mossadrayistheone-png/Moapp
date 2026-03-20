@@ -32,9 +32,15 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
 
     const reply = completion.choices[0]?.message?.content?.trim() ?? "I'm sorry, I couldn't process that.";
     res.json({ reply });
-  } catch (err) {
+  } catch (err: any) {
     req.log.error({ err }, "OpenAI chat error");
-    res.status(500).json({ error: "Failed to get a response from Mo." });
+    if (err?.status === 429 || err?.code === "insufficient_quota") {
+      res.status(500).json({ error: "OpenAI quota exceeded. Please check your billing at platform.openai.com." });
+    } else if (err?.status === 401) {
+      res.status(500).json({ error: "Invalid OpenAI API key. Please check your OPENAI_API_KEY secret." });
+    } else {
+      res.status(500).json({ error: "Failed to get a response from Mo." });
+    }
   }
 });
 
