@@ -3,9 +3,11 @@ import { useMoChat, useMoSpeak } from '@workspace/api-client-react';
 import { useToast } from '@/hooks/use-toast';
 
 export type AssistantState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
+export type AssistantMode = 'executive' | 'creative' | 'motivational';
 
 export function useVoiceAssistant() {
   const [state, setState] = useState<AssistantState>('idle');
+  const [mode, setMode] = useState<AssistantMode>('executive');
   const [transcript, setTranscript] = useState('');
   const [reply, setReply] = useState('');
   
@@ -93,7 +95,7 @@ export function useVoiceAssistant() {
       setState('thinking');
       
       // 1. Send text to chat API
-      const chatRes = await chatMutation.mutateAsync({ data: { message: finalText } });
+      const chatRes = await chatMutation.mutateAsync({ data: { message: finalText, mode } });
       setReply(chatRes.reply);
 
       // 2. Convert reply to audio
@@ -127,7 +129,7 @@ export function useVoiceAssistant() {
       });
       setTimeout(() => setState('idle'), 3000);
     }
-  }, [chatMutation, speakMutation, toast]);
+  }, [chatMutation, speakMutation, toast, mode]);
 
   const start = useCallback(() => {
     if (audioRef.current) {
@@ -170,7 +172,9 @@ export function useVoiceAssistant() {
   }, [state, start, stop]);
 
   return { 
-    state, 
+    state,
+    mode,
+    setMode,
     transcript, 
     reply, 
     toggle,

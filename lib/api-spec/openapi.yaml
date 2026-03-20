@@ -91,6 +91,11 @@ components:
         message:
           type: string
           description: The user's spoken message
+        mode:
+          type: string
+          enum: [executive, creative, motivational]
+          description: The assistant personality mode
+          default: executive
       required:
         - message
     ChatResponse:

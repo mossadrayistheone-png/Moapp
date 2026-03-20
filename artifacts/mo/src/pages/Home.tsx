@@ -1,7 +1,14 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useVoiceAssistant } from "@/hooks/use-voice-assistant";
+import { useVoiceAssistant, type AssistantMode } from "@/hooks/use-voice-assistant";
 import { MicButton } from "@/components/MicButton";
 import { Waveform } from "@/components/Waveform";
+import { cn } from "@/lib/utils";
+
+const MODES: { id: AssistantMode; label: string }[] = [
+  { id: "executive", label: "Executive" },
+  { id: "creative", label: "Creative" },
+  { id: "motivational", label: "Motivational" },
+];
 
 export default function Home() {
   const assistant = useVoiceAssistant();
@@ -81,6 +88,25 @@ export default function Home() {
 
       {/* Bottom Control Area */}
       <div className="absolute bottom-12 w-full flex flex-col items-center justify-end z-20">
+
+        {/* Mode Switcher */}
+        <div className="flex items-center gap-6 mb-8">
+          {MODES.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => assistant.setMode(m.id)}
+              disabled={assistant.isListening || assistant.isThinking || assistant.isSpeaking}
+              className={cn(
+                "text-[10px] font-medium tracking-[0.2em] uppercase transition-all duration-500 disabled:pointer-events-none",
+                assistant.mode === m.id
+                  ? "text-primary"
+                  : "text-white/20 hover:text-white/40"
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
         
         <MicButton 
           state={assistant.state} 

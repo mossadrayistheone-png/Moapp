@@ -19,8 +19,14 @@ export const HealthCheckResponse = zod.object({
  * Sends user text to OpenAI and returns Mo's response
  * @summary Send a message to Mo
  */
+export const moChatBodyModeDefault = `executive`;
+
 export const MoChatBody = zod.object({
   message: zod.string().describe("The user's spoken message"),
+  mode: zod
+    .enum(["executive", "creative", "motivational"])
+    .default(moChatBodyModeDefault)
+    .describe("The assistant personality mode"),
 });
 
 export const MoChatResponse = zod.object({

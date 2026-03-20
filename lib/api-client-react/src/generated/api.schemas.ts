@@ -9,9 +9,23 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * The assistant personality mode
+ */
+export type ChatRequestMode =
+  (typeof ChatRequestMode)[keyof typeof ChatRequestMode];
+
+export const ChatRequestMode = {
+  executive: "executive",
+  creative: "creative",
+  motivational: "motivational",
+} as const;
+
 export interface ChatRequest {
   /** The user's spoken message */
   message: string;
+  /** The assistant personality mode */
+  mode?: ChatRequestMode;
 }
 
 export interface ChatResponse {

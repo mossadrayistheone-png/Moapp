@@ -7,6 +7,7 @@
  */
 
 export * from "./chatRequest";
+export * from "./chatRequestMode";
 export * from "./chatResponse";
 export * from "./errorResponse";
 export * from "./healthStatus";
