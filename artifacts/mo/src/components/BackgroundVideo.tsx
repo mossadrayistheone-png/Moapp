@@ -19,7 +19,6 @@ export function BackgroundVideo() {
 
   return (
     <div className="fixed inset-0 z-0 overflow-hidden">
-      {/* Video layer */}
       <video
         ref={videoRef}
         src="/background.mp4"
@@ -28,21 +27,11 @@ export function BackgroundVideo() {
         muted
         playsInline
         preload="auto"
-        className="absolute inset-0 w-full h-full object-cover scale-105 blur-[1px]"
+        className="absolute inset-0 w-full h-full object-cover"
         style={{ willChange: "transform" }}
       />
-
-      {/* Light base overlay — keeps it cinematic without killing the image */}
-      <div className="absolute inset-0 bg-black/40" />
-
-      {/* Vignette — darkens edges only, centre stays open */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%)",
-        }}
-      />
+      {/* Minimal scrim — just enough to take the edge off bright areas */}
+      <div className="absolute inset-0 bg-black/25" />
     </div>
   );
 }

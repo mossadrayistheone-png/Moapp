@@ -14,14 +14,12 @@ const MODES: { id: AssistantMode; label: string }[] = [
 export default function Home() {
   const assistant = useVoiceAssistant();
 
-  // Determine the display text based on state
   let statusLabel = "Tap to speak";
   if (assistant.isListening) statusLabel = "Listening...";
   if (assistant.isThinking) statusLabel = "Thinking...";
   if (assistant.isSpeaking) statusLabel = "Speaking...";
   if (assistant.isError) statusLabel = "Error. Try again.";
 
-  // For the smooth letter reveal of status label
   const statusCharacters = statusLabel.split('');
 
   return (
@@ -30,32 +28,26 @@ export default function Home() {
       {/* Full-screen background video */}
       <BackgroundVideo />
 
-      {/* Subtle gold ambient glows above video, below UI */}
-      <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] rounded-full pointer-events-none z-[1]" />
-      <div className="absolute bottom-[-20%] left-1/2 -translate-x-1/2 w-[60vw] h-[60vh] bg-primary/5 blur-[150px] rounded-full pointer-events-none z-[1]" />
-
-      {/* Top Brand Mark */}
+      {/* Top Brand Mark — sits directly over the video */}
       <header className="absolute top-0 w-full p-8 flex justify-center z-10 pointer-events-none">
-        <motion.h1 
+        <motion.h1
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="font-display text-3xl font-medium tracking-widest text-primary text-glow italic"
+          className="font-display text-3xl font-medium tracking-widest text-primary italic drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]"
+          style={{ textShadow: "0 2px 16px rgba(0,0,0,0.9), 0 0 20px hsl(45 61% 56% / 0.3)" }}
         >
           Mo.
         </motion.h1>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-3xl mx-auto flex flex-col items-center justify-center p-6 sm:p-12 z-10 relative mt-16 mb-32"
-        style={{ background: "radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, transparent 80%)" }}
-      >
-        
-        {/* Dynamic Text Area (User Transcript or AI Reply) */}
-        <div className="flex-1 w-full flex flex-col justify-end items-center text-center mb-12 min-h-[200px]">
+      {/* Central UI Panel — semi-transparent card that holds all interactive content */}
+      <main className="relative z-10 flex flex-col items-center justify-between w-full min-h-[100dvh] py-24 px-6">
+
+        {/* Text display area — frosted panel, only rendered when there's content */}
+        <div className="flex-1 flex items-center justify-center w-full max-w-2xl mx-auto">
           <AnimatePresence mode="wait">
-            
-            {/* User Transcript */}
+
             {(assistant.isListening || (assistant.isThinking && !assistant.reply)) && (
               <motion.div
                 key="transcript"
@@ -63,15 +55,15 @@ export default function Home() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                className="w-full max-w-2xl"
+                className="w-full rounded-2xl px-8 py-6 text-center"
+                style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(12px)" }}
               >
-                <p className="text-xl sm:text-2xl text-muted-foreground font-light leading-relaxed">
-                  {assistant.transcript || <span className="opacity-30">I am listening...</span>}
+                <p className="text-xl sm:text-2xl text-white/80 font-light leading-relaxed">
+                  {assistant.transcript || <span className="opacity-40">Listening...</span>}
                 </p>
               </motion.div>
             )}
 
-            {/* AI Reply */}
             {(assistant.isSpeaking || (assistant.reply && assistant.isIdle)) && (
               <motion.div
                 key="reply"
@@ -79,9 +71,11 @@ export default function Home() {
                 animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
                 exit={{ opacity: 0, scale: 0.98, filter: "blur(4px)" }}
                 transition={{ duration: 0.8, ease: "easeOut" }}
-                className="w-full max-w-3xl"
+                className="w-full rounded-2xl px-8 py-8 text-center"
+                style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(12px)" }}
               >
-                <p className="font-display text-3xl sm:text-4xl md:text-5xl text-foreground leading-tight tracking-wide text-glow">
+                <p className="font-display text-3xl sm:text-4xl md:text-5xl text-white leading-tight tracking-wide"
+                   style={{ textShadow: "0 0 20px hsl(45 61% 56% / 0.25)" }}>
                   {assistant.reply}
                 </p>
               </motion.div>
@@ -90,79 +84,75 @@ export default function Home() {
           </AnimatePresence>
         </div>
 
-      </main>
-
-      {/* Bottom Control Area */}
-      <div className="absolute bottom-0 w-full flex flex-col items-center justify-end z-20 pb-12 pt-24"
-        style={{ background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.5) 50%, transparent 100%)" }}
-      >
-
-        {/* Mode Switcher */}
-        <div className="flex items-center gap-6 mb-8">
-          {MODES.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => assistant.setMode(m.id)}
-              disabled={assistant.isListening || assistant.isThinking || assistant.isSpeaking}
-              className={cn(
-                "text-[10px] font-medium tracking-[0.2em] uppercase transition-all duration-500 disabled:pointer-events-none",
-                assistant.mode === m.id
-                  ? "text-primary"
-                  : "text-white/20 hover:text-white/40"
-              )}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-        
-        <MicButton 
-          state={assistant.state} 
-          onClick={assistant.toggle} 
-        />
-        
-        {/* Waveform below the button during speaking */}
-        <div className="h-8 mt-2 flex items-center justify-center">
-          <AnimatePresence>
-            {assistant.isSpeaking && (
-              <motion.div
-                initial={{ opacity: 0, height: 0, y: -10 }}
-                animate={{ opacity: 1, height: "auto", y: 0 }}
-                exit={{ opacity: 0, height: 0, y: -10 }}
-                transition={{ duration: 0.6, ease: "easeInOut" }}
+        {/* Bottom controls — contained panel */}
+        <div
+          className="w-full max-w-sm mx-auto flex flex-col items-center gap-6 rounded-2xl px-8 py-6"
+          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(16px)" }}
+        >
+          {/* Mode Switcher */}
+          <div className="flex items-center gap-6">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => assistant.setMode(m.id)}
+                disabled={assistant.isListening || assistant.isThinking || assistant.isSpeaking}
+                className={cn(
+                  "text-[10px] font-medium tracking-[0.2em] uppercase transition-all duration-500 disabled:pointer-events-none",
+                  assistant.mode === m.id
+                    ? "text-primary"
+                    : "text-white/30 hover:text-white/60"
+                )}
               >
-                <Waveform active={true} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-        
-        <div className="mt-4 h-6 flex justify-center">
-          <AnimatePresence mode="wait">
-            <motion.p 
-              key={statusLabel}
-              className="text-sm font-medium tracking-widest uppercase text-primary/70 flex space-x-0"
-            >
-              {statusCharacters.map((char, index) => (
-                <motion.span
-                  key={index}
-                  initial={{ opacity: 0, filter: "blur(2px)" }}
-                  animate={{ opacity: 1, filter: "blur(0px)" }}
-                  exit={{ opacity: 0, filter: "blur(2px)" }}
-                  transition={{ 
-                    duration: 0.4, 
-                    ease: "easeInOut",
-                    delay: index * 0.03
-                  }}
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          <MicButton
+            state={assistant.state}
+            onClick={assistant.toggle}
+          />
+
+          {/* Waveform */}
+          <div className="h-8 flex items-center justify-center">
+            <AnimatePresence>
+              {assistant.isSpeaking && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.4, ease: "easeInOut" }}
                 >
-                  {char === " " ? "\u00A0" : char}
-                </motion.span>
-              ))}
-            </motion.p>
-          </AnimatePresence>
+                  <Waveform active={true} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Status label */}
+          <div className="h-5 flex justify-center">
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={statusLabel}
+                className="text-[11px] font-medium tracking-widest uppercase text-primary/80 flex space-x-0"
+              >
+                {statusCharacters.map((char, index) => (
+                  <motion.span
+                    key={index}
+                    initial={{ opacity: 0, filter: "blur(2px)" }}
+                    animate={{ opacity: 1, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, filter: "blur(2px)" }}
+                    transition={{ duration: 0.4, ease: "easeInOut", delay: index * 0.03 }}
+                  >
+                    {char === " " ? "\u00A0" : char}
+                  </motion.span>
+                ))}
+              </motion.p>
+            </AnimatePresence>
+          </div>
         </div>
 
-      </div>
+      </main>
 
     </div>
   );
