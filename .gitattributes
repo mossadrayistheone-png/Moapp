@@ -1,0 +1,2 @@
+artifacts/mo/public/background.mp4 filter=lfs diff=lfs merge=lfs -text
+attached_assets/lv_0_20260320141159_1774035014653.mp4 filter=lfs diff=lfs merge=lfs -text

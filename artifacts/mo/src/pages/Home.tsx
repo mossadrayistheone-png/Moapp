@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useVoiceAssistant, type AssistantMode } from "@/hooks/use-voice-assistant";
 import { MicButton } from "@/components/MicButton";
 import { Waveform } from "@/components/Waveform";
+import { BackgroundVideo } from "@/components/BackgroundVideo";
 import { cn } from "@/lib/utils";
 
 const MODES: { id: AssistantMode; label: string }[] = [
@@ -25,10 +26,13 @@ export default function Home() {
 
   return (
     <div className="relative min-h-[100dvh] w-full flex flex-col items-center overflow-hidden">
-      
-      {/* Luxury Ambient Background Glows */}
-      <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-20%] left-1/2 -translate-x-1/2 w-[60vw] h-[60vh] bg-primary/5 blur-[150px] rounded-full pointer-events-none" />
+
+      {/* Full-screen background video */}
+      <BackgroundVideo />
+
+      {/* Subtle gold ambient glows above video, below UI */}
+      <div className="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-primary/5 blur-[120px] rounded-full pointer-events-none z-[1]" />
+      <div className="absolute bottom-[-20%] left-1/2 -translate-x-1/2 w-[60vw] h-[60vh] bg-primary/5 blur-[150px] rounded-full pointer-events-none z-[1]" />
 
       {/* Top Brand Mark */}
       <header className="absolute top-0 w-full p-8 flex justify-center z-10 pointer-events-none">
