@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useVoiceAssistant } from "@/hooks/use-voice-assistant";
 import { MicButton } from "@/components/MicButton";
+import { Waveform } from "@/components/Waveform";
 
 export default function Home() {
   const assistant = useVoiceAssistant();
@@ -11,6 +12,9 @@ export default function Home() {
   if (assistant.isThinking) statusLabel = "Thinking...";
   if (assistant.isSpeaking) statusLabel = "Speaking...";
   if (assistant.isError) statusLabel = "Error. Try again.";
+
+  // For the smooth letter reveal of status label
+  const statusCharacters = statusLabel.split('');
 
   return (
     <div className="relative min-h-[100dvh] w-full flex flex-col items-center overflow-hidden">
@@ -45,7 +49,7 @@ export default function Home() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
-                transition={{ duration: 0.4 }}
+                transition={{ duration: 0.6, ease: "easeInOut" }}
                 className="w-full max-w-2xl"
               >
                 <p className="text-xl sm:text-2xl text-muted-foreground font-light leading-relaxed">
@@ -58,10 +62,10 @@ export default function Home() {
             {(assistant.isSpeaking || (assistant.reply && assistant.isIdle)) && (
               <motion.div
                 key="reply"
-                initial={{ opacity: 0, scale: 0.95, filter: "blur(8px)" }}
+                initial={{ opacity: 0, scale: 0.98, filter: "blur(8px)" }}
                 animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-                exit={{ opacity: 0, scale: 0.95, filter: "blur(4px)" }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
+                exit={{ opacity: 0, scale: 0.98, filter: "blur(4px)" }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
                 className="w-full max-w-3xl"
               >
                 <p className="font-display text-3xl sm:text-4xl md:text-5xl text-foreground leading-tight tracking-wide text-glow">
@@ -77,19 +81,53 @@ export default function Home() {
 
       {/* Bottom Control Area */}
       <div className="absolute bottom-12 w-full flex flex-col items-center justify-end z-20">
+        
         <MicButton 
           state={assistant.state} 
           onClick={assistant.toggle} 
         />
         
-        <motion.p 
-          key={statusLabel}
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-6 text-sm font-medium tracking-widest uppercase text-primary/70"
-        >
-          {statusLabel}
-        </motion.p>
+        {/* Waveform below the button during speaking */}
+        <div className="h-8 mt-2 flex items-center justify-center">
+          <AnimatePresence>
+            {assistant.isSpeaking && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, y: -10 }}
+                animate={{ opacity: 1, height: "auto", y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -10 }}
+                transition={{ duration: 0.6, ease: "easeInOut" }}
+              >
+                <Waveform active={true} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        
+        <div className="mt-4 h-6 flex justify-center">
+          <AnimatePresence mode="wait">
+            <motion.p 
+              key={statusLabel}
+              className="text-sm font-medium tracking-widest uppercase text-primary/70 flex space-x-0"
+            >
+              {statusCharacters.map((char, index) => (
+                <motion.span
+                  key={index}
+                  initial={{ opacity: 0, filter: "blur(2px)" }}
+                  animate={{ opacity: 1, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, filter: "blur(2px)" }}
+                  transition={{ 
+                    duration: 0.4, 
+                    ease: "easeInOut",
+                    delay: index * 0.03
+                  }}
+                >
+                  {char === " " ? "\u00A0" : char}
+                </motion.span>
+              ))}
+            </motion.p>
+          </AnimatePresence>
+        </div>
+
       </div>
 
     </div>
