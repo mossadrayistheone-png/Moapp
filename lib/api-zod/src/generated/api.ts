@@ -3,9 +3,92 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 import * as zod from "zod";
+
+// ── Shared sub-schemas ────────────────────────────────────────────────────────
+
+const conversationMessageSchema = zod.object({
+  role: zod.enum(["user", "assistant"]),
+  content: zod.string(),
+});
+
+const preferencesSchema = zod.object({
+  name: zod.string().optional(),
+  location: zod.string().optional(),
+  timezone: zod.string().optional(),
+  responseLength: zod.enum(["short", "medium", "long"]).default("medium"),
+});
+
+const memoryItemSchema = zod
+  .object({
+    id: zod.string(),
+    category: zod.enum(["personal", "preferences", "schedule", "goals"]),
+    key: zod.string(),
+    value: zod.string(),
+    createdAt: zod.number(),
+    updatedAt: zod.number(),
+  })
+  .describe("A single remembered fact about the user");
+
+const taskSchema = zod
+  .object({
+    id: zod.string(),
+    title: zod.string(),
+    dueDate: zod.string().optional().describe("Optional ISO 8601 due date in UTC"),
+    status: zod.enum(["pending", "completed"]),
+    category: zod.string().optional().describe("Optional: work, personal, health, finance, other"),
+    createdAt: zod.number(),
+    updatedAt: zod.number(),
+    completedAt: zod.number().optional(),
+  })
+  .describe("A user task");
+
+const reminderContextSchema = zod
+  .object({
+    id: zod.string(),
+    title: zod.string(),
+    content: zod.string(),
+    datetime: zod.string(),
+  })
+  .describe("Upcoming reminder for context");
+
+const reminderDataSchema = zod.object({
+  title: zod.string(),
+  content: zod.string(),
+  datetime: zod.string(),
+});
+
+const reminderActionSchema = zod
+  .object({
+    action: zod.enum(["delete", "dismiss"]),
+    title: zod.string().describe("Title keyword to match the reminder to act on"),
+  })
+  .describe("Action taken on an existing reminder");
+
+const noteSchema = zod.object({
+  content: zod.string(),
+  timestamp: zod.string().optional(),
+});
+
+const memoryActionSchema = zod.object({
+  action: zod.enum(["save", "delete"]),
+  category: zod.enum(["personal", "preferences", "schedule", "goals"]).optional(),
+  key: zod.string(),
+  value: zod.string().optional(),
+});
+
+const taskActionSchema = zod
+  .object({
+    action: zod.enum(["add", "complete", "delete"]),
+    title: zod.string(),
+    dueDate: zod.string().optional(),
+    category: zod.string().optional(),
+  })
+  .describe("Task operation triggered by this response");
+
+// ── Health ────────────────────────────────────────────────────────────────────
 
 /**
  * @summary Health check
@@ -13,6 +96,8 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
 
 /**
  * @summary Send a message to Mo
@@ -25,99 +110,30 @@ export const MoChatBody = zod.object({
   mode: zod
     .enum(["executive", "creative", "motivational", "planner"])
     .default(moChatBodyModeDefault),
-  messages: zod
-    .array(
-      zod.object({
-        role: zod.enum(["user", "assistant"]),
-        content: zod.string(),
-      }),
-    )
-    .optional(),
-  preferences: zod
-    .object({
-      name: zod.string().optional(),
-      location: zod.string().optional(),
-      timezone: zod.string().optional(),
-      responseLength: zod
-        .enum(["short", "medium", "long"])
-        .default(moChatBodyPreferencesResponseLengthDefault),
-    })
-    .optional(),
-  memories: zod
-    .array(
-      zod
-        .object({
-          id: zod.string(),
-          category: zod.enum(["personal", "preferences", "schedule", "goals"]),
-          key: zod.string(),
-          value: zod.string(),
-          createdAt: zod.number(),
-          updatedAt: zod.number(),
-        })
-        .describe("A single remembered fact about the user"),
-    )
-    .optional(),
+  messages: zod.array(conversationMessageSchema).optional(),
+  preferences: preferencesSchema.optional(),
+  memories: zod.array(memoryItemSchema).optional(),
   tasks: zod
-    .array(
-      zod
-        .object({
-          id: zod.string(),
-          title: zod.string(),
-          dueDate: zod
-            .string()
-            .optional()
-            .describe("Optional ISO 8601 due date in UTC"),
-          status: zod.enum(["pending", "completed"]),
-          category: zod
-            .string()
-            .optional()
-            .describe("Optional: work, personal, health, finance, other"),
-          createdAt: zod.number(),
-          updatedAt: zod.number(),
-          completedAt: zod.number().optional(),
-        })
-        .describe("A user task"),
-    )
+    .array(taskSchema)
     .optional()
     .describe("Current pending tasks for context"),
+  reminders: zod
+    .array(reminderContextSchema)
+    .optional()
+    .describe("Upcoming reminders for context"),
 });
 
 export const MoChatResponse = zod.object({
   reply: zod.string(),
   functionCalled: zod.string().optional(),
-  reminder: zod
-    .object({
-      title: zod.string(),
-      content: zod.string(),
-      datetime: zod.string(),
-    })
-    .optional(),
-  note: zod
-    .object({
-      content: zod.string(),
-      timestamp: zod.string().optional(),
-    })
-    .optional(),
-  memoryAction: zod
-    .object({
-      action: zod.enum(["save", "delete"]),
-      category: zod
-        .enum(["personal", "preferences", "schedule", "goals"])
-        .optional(),
-      key: zod.string(),
-      value: zod.string().optional(),
-    })
-    .optional(),
-  taskAction: zod
-    .object({
-      action: zod.enum(["add", "complete", "delete"]),
-      title: zod.string(),
-      dueDate: zod.string().optional(),
-      category: zod.string().optional(),
-    })
-    .optional()
-    .describe("Task operation triggered by this response"),
+  reminder: reminderDataSchema.optional(),
+  reminderAction: reminderActionSchema.optional(),
+  note: noteSchema.optional(),
+  memoryAction: memoryActionSchema.optional(),
+  taskAction: taskActionSchema.optional(),
 });
+
+// ── Speak ─────────────────────────────────────────────────────────────────────
 
 /**
  * @summary Convert text to speech via ElevenLabs
@@ -125,6 +141,8 @@ export const MoChatResponse = zod.object({
 export const MoSpeakBody = zod.object({
   text: zod.string(),
 });
+
+// ── Voice ─────────────────────────────────────────────────────────────────────
 
 /**
  * @summary Full voice pipeline for native mobile
@@ -135,67 +153,21 @@ export const moVoiceBodyPreferencesResponseLengthDefault = `medium`;
 
 export const MoVoiceBody = zod.object({
   audio: zod.string().describe("Base64-encoded audio file"),
-  format: zod
-    .enum(["m4a", "mp4", "wav", "caf"])
-    .default(moVoiceBodyFormatDefault),
+  format: zod.enum(["m4a", "mp4", "wav", "caf"]).default(moVoiceBodyFormatDefault),
   mode: zod
     .enum(["executive", "creative", "motivational", "planner"])
     .default(moVoiceBodyModeDefault),
-  messages: zod
-    .array(
-      zod.object({
-        role: zod.enum(["user", "assistant"]),
-        content: zod.string(),
-      }),
-    )
-    .optional(),
-  preferences: zod
-    .object({
-      name: zod.string().optional(),
-      location: zod.string().optional(),
-      timezone: zod.string().optional(),
-      responseLength: zod
-        .enum(["short", "medium", "long"])
-        .default(moVoiceBodyPreferencesResponseLengthDefault),
-    })
-    .optional(),
-  memories: zod
-    .array(
-      zod
-        .object({
-          id: zod.string(),
-          category: zod.enum(["personal", "preferences", "schedule", "goals"]),
-          key: zod.string(),
-          value: zod.string(),
-          createdAt: zod.number(),
-          updatedAt: zod.number(),
-        })
-        .describe("A single remembered fact about the user"),
-    )
-    .optional(),
+  messages: zod.array(conversationMessageSchema).optional(),
+  preferences: preferencesSchema.optional(),
+  memories: zod.array(memoryItemSchema).optional(),
   tasks: zod
-    .array(
-      zod
-        .object({
-          id: zod.string(),
-          title: zod.string(),
-          dueDate: zod
-            .string()
-            .optional()
-            .describe("Optional ISO 8601 due date in UTC"),
-          status: zod.enum(["pending", "completed"]),
-          category: zod
-            .string()
-            .optional()
-            .describe("Optional: work, personal, health, finance, other"),
-          createdAt: zod.number(),
-          updatedAt: zod.number(),
-          completedAt: zod.number().optional(),
-        })
-        .describe("A user task"),
-    )
+    .array(taskSchema)
     .optional()
     .describe("Current pending tasks for context"),
+  reminders: zod
+    .array(reminderContextSchema)
+    .optional()
+    .describe("Upcoming reminders for context"),
 });
 
 export const MoVoiceResponse = zod.object({
@@ -203,36 +175,9 @@ export const MoVoiceResponse = zod.object({
   reply: zod.string(),
   audioBase64: zod.string(),
   functionCalled: zod.string().optional(),
-  reminder: zod
-    .object({
-      title: zod.string(),
-      content: zod.string(),
-      datetime: zod.string(),
-    })
-    .optional(),
-  note: zod
-    .object({
-      content: zod.string(),
-      timestamp: zod.string().optional(),
-    })
-    .optional(),
-  memoryAction: zod
-    .object({
-      action: zod.enum(["save", "delete"]),
-      category: zod
-        .enum(["personal", "preferences", "schedule", "goals"])
-        .optional(),
-      key: zod.string(),
-      value: zod.string().optional(),
-    })
-    .optional(),
-  taskAction: zod
-    .object({
-      action: zod.enum(["add", "complete", "delete"]),
-      title: zod.string(),
-      dueDate: zod.string().optional(),
-      category: zod.string().optional(),
-    })
-    .optional()
-    .describe("Task operation triggered by this response"),
+  reminder: reminderDataSchema.optional(),
+  reminderAction: reminderActionSchema.optional(),
+  note: noteSchema.optional(),
+  memoryAction: memoryActionSchema.optional(),
+  taskAction: taskActionSchema.optional(),
 });

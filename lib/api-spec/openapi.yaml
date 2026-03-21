@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Api
-  version: 0.4.0
+  version: 0.5.0
   description: Mo AI Voice Assistant API
 servers:
   - url: /api
@@ -129,7 +129,6 @@ components:
           default: medium
     MemoryItem:
       type: object
-      description: A single remembered fact about the user
       properties:
         id:
           type: string
@@ -161,7 +160,6 @@ components:
       required: [action, key]
     Task:
       type: object
-      description: A user task
       properties:
         id:
           type: string
@@ -169,13 +167,11 @@ components:
           type: string
         dueDate:
           type: string
-          description: Optional ISO 8601 due date in UTC
         status:
           type: string
           enum: [pending, completed]
         category:
           type: string
-          description: "Optional: work, personal, health, finance, other"
         createdAt:
           type: number
         updatedAt:
@@ -185,7 +181,6 @@ components:
       required: [id, title, status, createdAt, updatedAt]
     TaskAction:
       type: object
-      description: Task operation triggered by this response
       properties:
         action:
           type: string
@@ -197,8 +192,22 @@ components:
         category:
           type: string
       required: [action, title]
+    ReminderContext:
+      type: object
+      description: Upcoming reminder sent as context with each request
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        datetime:
+          type: string
+      required: [id, title, content, datetime]
     ReminderData:
       type: object
+      description: New reminder created by Mo (returned in response)
       properties:
         title:
           type: string
@@ -207,6 +216,17 @@ components:
         datetime:
           type: string
       required: [title, content, datetime]
+    ReminderAction:
+      type: object
+      description: Action taken on an existing reminder (returned in response)
+      properties:
+        action:
+          type: string
+          enum: [delete, dismiss]
+        title:
+          type: string
+          description: Title keyword to match the reminder to act on
+      required: [action, title]
     NoteData:
       type: object
       properties:
@@ -238,7 +258,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Task"
-          description: Current pending tasks for context
+        reminders:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReminderContext"
+          description: Upcoming reminders for context
       required: [message]
     ChatResponse:
       type: object
@@ -249,6 +273,8 @@ components:
           type: string
         reminder:
           $ref: "#/components/schemas/ReminderData"
+        reminderAction:
+          $ref: "#/components/schemas/ReminderAction"
         note:
           $ref: "#/components/schemas/NoteData"
         memoryAction:
@@ -290,7 +316,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Task"
-          description: Current pending tasks for context
+        reminders:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReminderContext"
+          description: Upcoming reminders for context
       required: [audio]
     VoiceResponse:
       type: object
@@ -305,6 +335,8 @@ components:
           type: string
         reminder:
           $ref: "#/components/schemas/ReminderData"
+        reminderAction:
+          $ref: "#/components/schemas/ReminderAction"
         note:
           $ref: "#/components/schemas/NoteData"
         memoryAction:

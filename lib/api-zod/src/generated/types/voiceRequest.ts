@@ -3,10 +3,11 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 import type { ConversationMessage } from "./conversationMessage";
 import type { MemoryItem } from "./memoryItem";
+import type { ReminderContext } from "./reminderContext";
 import type { Task } from "./task";
 import type { UserPreferences } from "./userPreferences";
 import type { VoiceRequestFormat } from "./voiceRequestFormat";
@@ -22,4 +23,6 @@ export interface VoiceRequest {
   memories?: MemoryItem[];
   /** Current pending tasks for context */
   tasks?: Task[];
+  /** Upcoming reminders for context */
+  reminders?: ReminderContext[];
 }

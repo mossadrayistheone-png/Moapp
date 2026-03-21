@@ -19,7 +19,7 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
-import { useVoice, type AssistantMode, type MemoryActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
+import { useVoice, type AssistantMode, type MemoryActionPayload, type ReminderActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ export default function HomeScreen() {
     deleteTaskByTitle,
   } = useApp();
   const { addNote } = useNotes();
-  const { addReminder, upcomingReminders } = useReminders();
+  const { addReminder, deleteReminderByTitle, upcomingReminders, reminders } = useReminders();
 
   const voiceCallbacks = {
     onNote: useCallback(
@@ -132,6 +132,14 @@ export default function HomeScreen() {
       },
       [saveMemory, deleteMemoryByKey]
     ),
+    onReminderAction: useCallback(
+      (action: ReminderActionPayload) => {
+        if ((action.action === "delete" || action.action === "dismiss") && action.title) {
+          deleteReminderByTitle(action.title);
+        }
+      },
+      [deleteReminderByTitle]
+    ),
     onTaskAction: useCallback(
       (action: TaskActionPayload) => {
         if (action.action === "add" && action.title) {
@@ -155,6 +163,7 @@ export default function HomeScreen() {
       conversationHistory,
       memories,
       tasks,
+      reminders,
       preferences: {
         name: preferences.name || undefined,
         location: preferences.location || undefined,

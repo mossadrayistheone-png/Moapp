@@ -41,9 +41,7 @@ export function useReminders() {
   }, []);
 
   const persist = useCallback((next: Reminder[]) => {
-    AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(
-      console.error
-    );
+    AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(console.error);
     setReminders(next);
   }, []);
 
@@ -66,7 +64,7 @@ export function useReminders() {
                 body: params.content,
                 sound: true,
               },
-              trigger: { date: triggerDate },
+              trigger: { date: triggerDate } as Notifications.NotificationTriggerInput,
             });
           }
         } catch (err) {
@@ -86,9 +84,7 @@ export function useReminders() {
 
       setReminders((prev) => {
         const next = [reminder, ...prev];
-        AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(
-          console.error
-        );
+        AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(console.error);
         return next;
       });
 
@@ -101,14 +97,38 @@ export function useReminders() {
     setReminders((prev) => {
       const reminder = prev.find((r) => r.id === id);
       if (reminder?.notificationId) {
-        Notifications.cancelScheduledNotificationAsync(
-          reminder.notificationId
-        ).catch(console.error);
+        Notifications.cancelScheduledNotificationAsync(reminder.notificationId).catch(
+          console.error
+        );
       }
       const next = prev.filter((r) => r.id !== id);
-      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(
-        console.error
+      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(console.error);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Delete reminder(s) by title keyword — used for voice commands like
+   * "delete my stretch reminder". Performs a case-insensitive partial match.
+   * Cancels any scheduled push notifications for matched reminders.
+   */
+  const deleteReminderByTitle = useCallback((titleKeyword: string) => {
+    const needle = titleKeyword.trim().toLowerCase();
+    setReminders((prev) => {
+      const toDelete = prev.filter((r) =>
+        r.title.toLowerCase().includes(needle)
       );
+      for (const r of toDelete) {
+        if (r.notificationId) {
+          Notifications.cancelScheduledNotificationAsync(r.notificationId).catch(
+            console.error
+          );
+        }
+      }
+      const next = prev.filter(
+        (r) => !r.title.toLowerCase().includes(needle)
+      );
+      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(console.error);
       return next;
     });
   }, []);
@@ -118,9 +138,7 @@ export function useReminders() {
       const next = prev.map((r) =>
         r.id === id ? { ...r, completed: true } : r
       );
-      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(
-        console.error
-      );
+      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(console.error);
       return next;
     });
   }, []);
@@ -134,6 +152,7 @@ export function useReminders() {
     upcomingReminders,
     addReminder,
     deleteReminder,
+    deleteReminderByTitle,
     markCompleted,
     isLoaded,
   };

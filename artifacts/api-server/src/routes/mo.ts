@@ -78,6 +78,18 @@ interface TaskAction {
   category?: string;
 }
 
+interface ReminderContext {
+  id: string;
+  title: string;
+  content: string;
+  datetime: string;
+}
+
+interface ReminderAction {
+  action: "delete" | "dismiss";
+  title: string;
+}
+
 // ── OpenAI tool definitions ──────────────────────────────────────────────────
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -283,6 +295,25 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "delete_reminder",
+      description:
+        "Delete or cancel an existing reminder. Call when the user says 'delete my reminder', 'cancel my reminder for X', 'remove the X reminder', or 'clear my reminder'.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description:
+              "Keyword from the reminder title to match (e.g. 'stretch' to match 'Stretch at desk'). Partial match is fine.",
+          },
+        },
+        required: ["title"],
+      },
+    },
+  },
 ];
 
 // ── Tool execution ───────────────────────────────────────────────────────────
@@ -337,6 +368,9 @@ async function executeTool(
 
     case "delete_task":
       return `Task "${args.title}" removed. Confirm in one sentence — e.g. "Removed from your list."`;
+
+    case "delete_reminder":
+      return `Reminder "${args.title}" cancelled. Confirm in one sentence — e.g. "Done, that reminder is cleared."`;
 
     default:
       return "Action not available.";
@@ -436,6 +470,40 @@ function buildTasksSection(tasks: Task[]): string {
   return `\n\nUser's pending tasks (${pending.length} total):\n${lines.join("\n")}\n\nWhen asked about tasks, summarise them naturally. When completing or deleting, confirm which task was affected.`;
 }
 
+function buildRemindersSection(reminders: ReminderContext[]): string {
+  const upcoming = reminders?.filter(
+    (r) => new Date(r.datetime) > new Date()
+  ) ?? [];
+  if (!upcoming.length) return "";
+
+  const formatDate = (iso: string): string => {
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const todayStr = now.toDateString();
+      const tomorrowStr = new Date(now.getTime() + 86_400_000).toDateString();
+      if (d.toDateString() === todayStr)
+        return `today at ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: true })}`;
+      if (d.toDateString() === tomorrowStr)
+        return `tomorrow at ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: true })}`;
+      return d.toLocaleString("en-GB", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return iso;
+    }
+  };
+
+  const lines = upcoming.slice(0, 10).map((r) => `• ${r.title} — ${formatDate(r.datetime)}`);
+
+  return `\n\nUser's upcoming reminders (${upcoming.length} total):\n${lines.join("\n")}\n\nWhen asked about reminders, reference them naturally. To delete a reminder, call delete_reminder with the title keyword.`;
+}
+
 function buildSystemPrompt(
   mode: string,
   preferences: {
@@ -445,7 +513,8 @@ function buildSystemPrompt(
     responseLength?: string;
   } | null,
   memories?: MemoryItem[],
-  tasks?: Task[]
+  tasks?: Task[],
+  reminders?: ReminderContext[]
 ): string {
   const base = MODE_PROMPTS[mode] ?? MODE_PROMPTS.executive;
   const now = new Date().toUTCString();
@@ -474,12 +543,16 @@ function buildSystemPrompt(
   const taskSection = buildTasksSection(tasks ?? []);
   if (taskSection) parts.push(taskSection);
 
+  const reminderSection = buildRemindersSection(reminders ?? []);
+  if (reminderSection) parts.push(reminderSection);
+
   return parts.join(" ");
 }
 
 type ToolCallResult = {
   functionCalled: string;
   reminder?: { title: string; content: string; datetime: string };
+  reminderAction?: ReminderAction;
   note?: { content: string };
   memoryAction?: MemoryAction;
   taskAction?: TaskAction;
@@ -555,6 +628,9 @@ async function runWithTools(
   if (toolName === "delete_task") {
     toolResult.taskAction = { action: "delete", title: toolArgs.title ?? "" };
   }
+  if (toolName === "delete_reminder") {
+    toolResult.reminderAction = { action: "delete", title: toolArgs.title ?? "" };
+  }
 
   const secondCompletion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -581,14 +657,15 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const { message, mode = "executive", messages = [], preferences, memories, tasks } =
+  const { message, mode = "executive", messages = [], preferences, memories, tasks, reminders } =
     parsed.data;
 
   const systemPrompt = buildSystemPrompt(
     mode,
     preferences ?? null,
     (memories as MemoryItem[]) ?? [],
-    (tasks as Task[]) ?? []
+    (tasks as Task[]) ?? [],
+    (reminders as ReminderContext[]) ?? []
   );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
@@ -606,6 +683,7 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
       reply,
       functionCalled: toolResult?.functionCalled,
       reminder: toolResult?.reminder,
+      reminderAction: toolResult?.reminderAction,
       note: toolResult?.note,
       memoryAction: toolResult?.memoryAction,
       taskAction: toolResult?.taskAction,
@@ -649,13 +727,15 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     preferences,
     memories,
     tasks,
+    reminders,
   } = parsed.data;
 
   const systemPrompt = buildSystemPrompt(
     mode,
     preferences ?? null,
     (memories as MemoryItem[]) ?? [],
-    (tasks as Task[]) ?? []
+    (tasks as Task[]) ?? [],
+    (reminders as ReminderContext[]) ?? []
   );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
@@ -711,6 +791,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       audioBase64,
       functionCalled: toolResult?.functionCalled,
       reminder: toolResult?.reminder,
+      reminderAction: toolResult?.reminderAction,
       note: toolResult?.note,
       memoryAction: toolResult?.memoryAction,
       taskAction: toolResult?.taskAction,

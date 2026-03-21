@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 
 export * from "./chatRequest";
@@ -19,6 +19,9 @@ export * from "./memoryActionCategory";
 export * from "./memoryItem";
 export * from "./memoryItemCategory";
 export * from "./noteData";
+export * from "./reminderAction";
+export * from "./reminderActionAction";
+export * from "./reminderContext";
 export * from "./reminderData";
 export * from "./speakRequest";
 export * from "./task";

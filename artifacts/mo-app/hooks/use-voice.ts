@@ -1,7 +1,8 @@
 import { Audio } from "expo-av";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useRef, useState } from "react";
 import type { MemoryItem, Task } from "@/context/AppContext";
+import type { Reminder } from "@/hooks/use-reminders";
 
 export type AssistantState =
   | "idle"
@@ -38,9 +39,15 @@ export interface TaskActionPayload {
   category?: string;
 }
 
+export interface ReminderActionPayload {
+  action: "delete" | "dismiss";
+  title: string;
+}
+
 export interface VoiceCallbacks {
   onNote?: (content: string) => void;
   onReminder?: (params: { title: string; content: string; datetime: string }) => void;
+  onReminderAction?: (action: ReminderActionPayload) => void;
   onMemoryAction?: (action: MemoryActionPayload) => void;
   onTaskAction?: (action: TaskActionPayload) => void;
   onTurnComplete?: (transcript: string, reply: string) => void;
@@ -75,6 +82,7 @@ interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
   memories?: MemoryItem[];
   tasks?: Task[];
+  reminders?: Reminder[];
   preferences?: UserPreferences;
   autoplay?: boolean;
   callbacks?: VoiceCallbacks;
@@ -85,6 +93,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
     conversationHistory = [],
     memories = [],
     tasks = [],
+    reminders = [],
     preferences,
     autoplay = true,
     callbacks,
@@ -176,7 +185,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         updatedAt: m.updatedAt,
       }));
 
-      // Serialize pending tasks for the API (completed tasks are not useful as context)
+      // Serialize pending tasks for the API
       const tasksForApi = tasks
         .filter((t) => t.status === "pending")
         .map((t) => ({
@@ -189,6 +198,18 @@ export function useVoice(options: UseVoiceOptions = {}) {
           updatedAt: t.updatedAt,
         }));
 
+      // Serialize upcoming reminders for the API (exclude completed + past)
+      const now = Date.now();
+      const remindersForApi = reminders
+        .filter((r) => !r.completed && new Date(r.datetime).getTime() > now)
+        .slice(0, 10)
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          content: r.content,
+          datetime: r.datetime,
+        }));
+
       const response = await fetch(`${BASE_URL}/api/mo/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -199,6 +220,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
           messages: recentHistory,
           memories: memoriesForApi,
           tasks: tasksForApi,
+          reminders: remindersForApi,
           preferences: preferences
             ? {
                 name: preferences.name,
@@ -221,6 +243,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         audioBase64: string;
         functionCalled?: string;
         reminder?: { title: string; content: string; datetime: string };
+        reminderAction?: ReminderActionPayload;
         note?: { content: string };
         memoryAction?: MemoryActionPayload;
         taskAction?: TaskActionPayload;
@@ -242,6 +265,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
       }
       if (data.reminder) {
         callbacks?.onReminder?.(data.reminder);
+      }
+      if (data.reminderAction) {
+        callbacks?.onReminderAction?.(data.reminderAction);
       }
       if (data.memoryAction) {
         callbacks?.onMemoryAction?.(data.memoryAction);
@@ -293,7 +319,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       setStateSync("error");
       setTimeout(() => setStateSync("idle"), 3000);
     }
-  }, [mode, conversationHistory, memories, preferences, autoplay, callbacks]);
+  }, [mode, conversationHistory, memories, tasks, reminders, preferences, autoplay, callbacks]);
 
   const stopSpeaking = useCallback(async () => {
     if (soundRef.current) {

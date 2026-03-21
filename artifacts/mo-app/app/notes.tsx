@@ -192,22 +192,56 @@ export default function NotesScreen() {
 
         {/* ── Reminders ── */}
         {activeTab === "reminders" && (
-          reminders.length === 0 ? (
-            <EmptyState
-              icon="bell"
-              title="No reminders yet"
-              subtitle={'Say "remind me to..." and Mo will schedule it for you.'}
-            />
-          ) : (
-            reminders.map((reminder) => (
-              <ReminderItem
-                key={reminder.id}
-                reminder={reminder}
-                onDelete={deleteReminder}
-                onComplete={markCompleted}
+          <>
+            {reminders.length === 0 ? (
+              <EmptyState
+                icon="bell"
+                title="No reminders yet"
+                subtitle={'Say "remind me in 1 hour to stretch" and Mo will schedule it.'}
               />
-            ))
-          )
+            ) : (
+              <>
+                {/* Upcoming */}
+                {reminders.filter((r) => !r.completed && new Date(r.datetime) > new Date()).length > 0 && (
+                  <View style={section.group}>
+                    <Text style={section.label}>
+                      Upcoming · {reminders.filter((r) => !r.completed && new Date(r.datetime) > new Date()).length}
+                    </Text>
+                    {reminders
+                      .filter((r) => !r.completed && new Date(r.datetime) > new Date())
+                      .sort((a, b) => new Date(a.datetime).getTime() - new Date(b.datetime).getTime())
+                      .map((reminder) => (
+                        <ReminderItem
+                          key={reminder.id}
+                          reminder={reminder}
+                          onDelete={deleteReminder}
+                          onComplete={markCompleted}
+                        />
+                      ))}
+                  </View>
+                )}
+                {/* Past / completed */}
+                {reminders.filter((r) => r.completed || new Date(r.datetime) <= new Date()).length > 0 && (
+                  <View style={section.group}>
+                    <Text style={section.label}>
+                      Past · {reminders.filter((r) => r.completed || new Date(r.datetime) <= new Date()).length}
+                    </Text>
+                    {reminders
+                      .filter((r) => r.completed || new Date(r.datetime) <= new Date())
+                      .sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime())
+                      .map((reminder) => (
+                        <ReminderItem
+                          key={reminder.id}
+                          reminder={reminder}
+                          onDelete={deleteReminder}
+                          onComplete={markCompleted}
+                        />
+                      ))}
+                  </View>
+                )}
+              </>
+            )}
+          </>
         )}
 
         {/* ── Memory ── */}
