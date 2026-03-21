@@ -145,7 +145,7 @@ export default function SettingsScreen() {
 
         {/* About */}
         <View style={styles.about}>
-          <Text style={styles.aboutText}>Mo · Private Intelligence</Text>
+          <Text style={styles.aboutText}>Mo · Executive Assistant</Text>
           <Text style={styles.aboutVersion}>Version 1.0</Text>
         </View>
       </ScrollView>

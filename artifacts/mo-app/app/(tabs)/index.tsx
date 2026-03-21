@@ -344,7 +344,7 @@ export default function HomeScreen() {
           {/* Brand */}
           <View style={styles.brand}>
             <Text style={styles.brandName}>Mo.</Text>
-            <Text style={styles.brandTagline}>Private Intelligence</Text>
+            <Text style={styles.brandTagline}>Executive Assistant</Text>
             {(pendingTaskCount > 0 || memoryCount > 0) && (
               <Text style={styles.memoryHint}>
                 {[
