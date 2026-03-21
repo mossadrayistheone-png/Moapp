@@ -56,6 +56,21 @@ export interface NoteActionPayload {
   keyword: string;
 }
 
+export interface PlanBlock {
+  time?: string;
+  title: string;
+  description?: string;
+  type: "task" | "reminder" | "focus" | "break" | "routine";
+  priority?: "high" | "medium" | "low";
+}
+
+export interface DayPlan {
+  title: string;
+  timeframe: "morning" | "afternoon" | "evening" | "full_day";
+  blocks: PlanBlock[];
+  generatedAt: number;
+}
+
 export interface VoiceCallbacks {
   onNote?: (note: NotePayload) => void;
   onNoteAction?: (action: NoteActionPayload) => void;
@@ -63,6 +78,7 @@ export interface VoiceCallbacks {
   onReminderAction?: (action: ReminderActionPayload) => void;
   onMemoryAction?: (action: MemoryActionPayload) => void;
   onTaskAction?: (action: TaskActionPayload) => void;
+  onPlan?: (plan: DayPlan) => void;
   onTurnComplete?: (transcript: string, reply: string) => void;
 }
 
@@ -273,6 +289,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         noteAction?: NoteActionPayload;
         memoryAction?: MemoryActionPayload;
         taskAction?: TaskActionPayload;
+        plan?: Omit<DayPlan, "generatedAt">;
       };
 
       const { transcript: tx, reply: rp, audioBase64: audiob64 } = data;
@@ -300,6 +317,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
       }
       if (data.memoryAction) {
         callbacks?.onMemoryAction?.(data.memoryAction);
+      }
+      if (data.plan) {
+        callbacks?.onPlan?.({ ...data.plan, generatedAt: Date.now() });
       }
       if (data.taskAction) {
         callbacks?.onTaskAction?.(data.taskAction);

@@ -3,7 +3,7 @@ import { ResizeMode, Video } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Pressable,
@@ -14,12 +14,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { MicButton } from "@/components/MicButton";
+import { PlanCard } from "@/components/PlanCard";
 import { WaveformBars } from "@/components/WaveformBars";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
-import { useVoice, type AssistantMode, type MemoryActionPayload, type NoteActionPayload, type NotePayload, type ReminderActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
+import { useVoice, type AssistantMode, type DayPlan, type MemoryActionPayload, type NoteActionPayload, type NotePayload, type ReminderActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ function StatusLabel({ state }: { state: string }) {
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const [activePlan, setActivePlan] = useState<DayPlan | null>(null);
   const {
     preferences,
     conversationHistory,
@@ -160,6 +162,10 @@ export default function HomeScreen() {
         }
       },
       [addTask, completeTaskByTitle, deleteTaskByTitle]
+    ),
+    onPlan: useCallback(
+      (plan: DayPlan) => setActivePlan(plan),
+      []
     ),
     onTurnComplete: useCallback(
       (transcript: string, reply: string) => addToHistory(transcript, reply),
@@ -344,44 +350,51 @@ export default function HomeScreen() {
 
         {/* ── Text area ── */}
         <View style={styles.textArea}>
-          {state === "idle" && !transcript && !reply && (
-            <View style={styles.idleBlock}>
-              <Text style={styles.idlePrompt}>
-                {preferences.name
-                  ? `Good to hear you, ${preferences.name.split(" ")[0]}.`
-                  : "Ask anything. Mo listens."}
-              </Text>
-              {hasConversation && (
-                <Text style={styles.continuityHint}>
-                  Conversation continues from last session
-                </Text>
+          {/* Active plan card — takes priority over idle/transcript/reply */}
+          {activePlan ? (
+            <PlanCard plan={activePlan} onDismiss={() => setActivePlan(null)} />
+          ) : (
+            <>
+              {state === "idle" && !transcript && !reply && (
+                <View style={styles.idleBlock}>
+                  <Text style={styles.idlePrompt}>
+                    {preferences.name
+                      ? `Good to hear you, ${preferences.name.split(" ")[0]}.`
+                      : "Ask anything. Mo listens."}
+                  </Text>
+                  {hasConversation && (
+                    <Text style={styles.continuityHint}>
+                      Conversation continues from last session
+                    </Text>
+                  )}
+                </View>
               )}
-            </View>
+
+              {state === "error" && (
+                <View style={styles.errorCard}>
+                  <Feather name="alert-circle" size={18} color={Colors.gold} />
+                  <Text style={styles.errorText} numberOfLines={3}>
+                    {errorMessage || "Something went wrong. Please try again."}
+                  </Text>
+                </View>
+              )}
+
+              {transcript ? (
+                <Animated.View
+                  style={[styles.transcriptBlock, { opacity: transcriptOpacity }]}
+                >
+                  <Text style={styles.transcriptLabel}>You said</Text>
+                  <Text style={styles.transcriptText}>"{transcript}"</Text>
+                </Animated.View>
+              ) : null}
+
+              {reply ? (
+                <Animated.Text style={[styles.replyText, { opacity: replyOpacity }]}>
+                  {reply}
+                </Animated.Text>
+              ) : null}
+            </>
           )}
-
-          {state === "error" && (
-            <View style={styles.errorCard}>
-              <Feather name="alert-circle" size={18} color={Colors.gold} />
-              <Text style={styles.errorText} numberOfLines={3}>
-                {errorMessage || "Something went wrong. Please try again."}
-              </Text>
-            </View>
-          )}
-
-          {transcript ? (
-            <Animated.View
-              style={[styles.transcriptBlock, { opacity: transcriptOpacity }]}
-            >
-              <Text style={styles.transcriptLabel}>You said</Text>
-              <Text style={styles.transcriptText}>"{transcript}"</Text>
-            </Animated.View>
-          ) : null}
-
-          {reply ? (
-            <Animated.Text style={[styles.replyText, { opacity: replyOpacity }]}>
-              {reply}
-            </Animated.Text>
-          ) : null}
         </View>
 
         {/* ── Bottom controls ── */}

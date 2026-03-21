@@ -103,6 +103,20 @@ interface NoteAction {
   keyword: string;
 }
 
+interface PlanBlock {
+  time?: string;
+  title: string;
+  description?: string;
+  type: "task" | "reminder" | "focus" | "break" | "routine";
+  priority?: "high" | "medium" | "low";
+}
+
+interface DayPlan {
+  title: string;
+  timeframe: "morning" | "afternoon" | "evening" | "full_day";
+  blocks: PlanBlock[];
+}
+
 // ── OpenAI tool definitions ──────────────────────────────────────────────────
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -355,6 +369,64 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "plan_day",
+      description:
+        "Create a structured daily plan for the user. Call when the user says 'plan my day', 'help me organize today', 'plan my morning', 'plan my afternoon', 'plan my work tasks for today', 'help me structure my day', or any similar planning request. Use all available context (tasks, reminders, notes, memories) to build a realistic, prioritized, time-aware schedule.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Plan title, e.g. 'Your Morning Plan', 'Today\\'s Work Plan', 'Your Afternoon'",
+          },
+          timeframe: {
+            type: "string",
+            enum: ["morning", "afternoon", "evening", "full_day"],
+            description: "Which part of the day this plan covers",
+          },
+          blocks: {
+            type: "array",
+            description:
+              "Ordered list of 4–8 time blocks. Each block is a specific activity, task, reminder, or focus period. Be realistic and leave breathing room.",
+            items: {
+              type: "object",
+              properties: {
+                time: {
+                  type: "string",
+                  description:
+                    "Suggested time label, e.g. '8:00 AM', 'Late morning', '2:00–3:00 PM'. Optional if the plan is non-time-specific.",
+                },
+                title: {
+                  type: "string",
+                  description: "Short, clear block title, e.g. 'Deep work: proposal draft', 'Gym session', 'Team standup'",
+                },
+                description: {
+                  type: "string",
+                  description: "Optional 1-sentence detail or context for this block",
+                },
+                type: {
+                  type: "string",
+                  enum: ["task", "reminder", "focus", "break", "routine"],
+                  description:
+                    "Block type — task: from the user's task list; reminder: time-sensitive reminder; focus: deep work/study; break: rest/meals; routine: daily habits",
+                },
+                priority: {
+                  type: "string",
+                  enum: ["high", "medium", "low"],
+                  description: "Priority level — high is urgent/important, low is nice-to-have",
+                },
+              },
+              required: ["title", "type"],
+            },
+          },
+        },
+        required: ["title", "timeframe", "blocks"],
+      },
+    },
+  },
 ];
 
 // ── Tool execution ───────────────────────────────────────────────────────────
@@ -415,6 +487,9 @@ async function executeTool(
 
     case "delete_reminder":
       return `Reminder "${args.title}" cancelled. Confirm in one sentence — e.g. "Done, that reminder is cleared."`;
+
+    case "plan_day":
+      return `Day plan created: "${args.title}". Deliver exactly one warm, composed sentence that sets the tone — e.g. "Here's how I'd structure your morning." or "Your day is laid out." Do not list the blocks; they appear on screen.`;
 
     default:
       return "Action not available.";
@@ -629,6 +704,7 @@ type ToolCallResult = {
   noteAction?: NoteAction;
   memoryAction?: MemoryAction;
   taskAction?: TaskAction;
+  plan?: DayPlan;
 };
 
 async function runWithTools(
@@ -682,6 +758,12 @@ async function runWithTools(
   }
   if (toolName === "delete_note") {
     toolResult.noteAction = { action: "delete", keyword: toolArgs.keyword ?? "" };
+  }
+  if (toolName === "plan_day") {
+    // toolArgs is already parsed from toolCall.function.arguments above
+    if (toolArgs.title && toolArgs.timeframe && toolArgs.blocks) {
+      toolResult.plan = toolArgs as unknown as DayPlan;
+    }
   }
   if (toolName === "save_memory") {
     toolResult.memoryAction = {
@@ -769,6 +851,7 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
       noteAction: toolResult?.noteAction,
       memoryAction: toolResult?.memoryAction,
       taskAction: toolResult?.taskAction,
+      plan: toolResult?.plan,
     });
   } catch (err: any) {
     req.log.error({ err }, "Mo chat error");
@@ -880,6 +963,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       noteAction: toolResult?.noteAction,
       memoryAction: toolResult?.memoryAction,
       taskAction: toolResult?.taskAction,
+      plan: toolResult?.plan,
     });
   } catch (err: any) {
     req.log.error({ err }, "Voice pipeline error");

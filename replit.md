@@ -31,6 +31,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - Four personality modes: Executive, Creative, Motivational, Planner
 - Conversation continuity: last 10 turns sent with every request
 - Notes: full CRUD via voice — save with optional title + category pill, delete by keyword; notes injected into system prompt for context; NoteCard shows title, color-coded category pill, mic/pen source icon
+- Planning: `plan_day` GPT tool generates structured daily plans (4–8 time blocks) from tasks/reminders/notes/memory context; PlanCard renders inline with animated block rows, priority accents, type icons, dismiss button
 - Reminders: local push notifications via expo-notifications, parsed by GPT
 - Settings: name, location, timezone, auto-play, response length, background video toggle
 - Fonts: Cormorant Garamond (display) + DM Sans (body)
