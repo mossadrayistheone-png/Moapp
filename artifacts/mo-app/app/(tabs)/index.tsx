@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -12,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path, Circle, Line } from "react-native-svg";
 
 import { MicButton } from "@/components/MicButton";
 import { PlanCard } from "@/components/PlanCard";
@@ -21,6 +21,50 @@ import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
 import { useVoice, type AssistantMode, type DayPlan, type MemoryActionPayload, type NoteActionPayload, type NotePayload, type ReminderActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
+
+// ── Header SVG icons (no icon fonts — font loading is unreliable in Expo Go) ──
+
+function GearIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+      />
+    </Svg>
+  );
+}
+
+function NotesIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Document outline with folded corner */}
+      <Path
+        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Folded corner crease */}
+      <Path
+        d="M14 2v6h6"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Text lines */}
+      <Line x1="16" y1="13" x2="8" y2="13" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+      <Line x1="16" y1="17" x2="8" y2="17" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+      <Line x1="10" y1="9"  x2="8" y2="9"  stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -286,7 +330,7 @@ export default function HomeScreen() {
             }}
             style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <Feather name="file-text" size={18} color={Colors.mutedWhite} />
+            <NotesIcon size={18} color={Colors.mutedWhite} />
             {/* Reminder badge */}
             {upcomingReminders.length > 0 && (
               <View style={styles.badge}>
@@ -319,7 +363,7 @@ export default function HomeScreen() {
             }}
             style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <Feather name="settings" size={18} color={Colors.mutedWhite} />
+            <GearIcon size={18} color={Colors.mutedWhite} />
           </Pressable>
         </View>
 

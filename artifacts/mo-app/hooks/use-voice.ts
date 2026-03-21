@@ -130,11 +130,14 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
 
 // ── Silence detection thresholds ─────────────────────────────────────────────
 
-// Metering values are in dBFS (0 = full scale, -160 = silence)
-const SPEECH_THRESHOLD_DB  = -35; // above this = user is speaking
-const SILENCE_THRESHOLD_DB = -42; // below this = silence
-const SILENCE_FRAMES       = 7;   // 7 × 200 ms = 1.4 s of sustained silence
-const MAX_RECORD_MS        = 30_000; // absolute cap before auto-stop
+// Metering values are in dBFS (0 = full scale, −160 = silence)
+const SPEECH_THRESHOLD_DB  = -35;  // above this = user is speaking
+const SILENCE_THRESHOLD_DB = -42;  // absolute quiet floor
+const PEAK_DROP_DB         = 14;   // drop from speech peak → counts as silence
+                                   //   works even in loud/noisy environments
+const SILENCE_FRAMES       = 4;    // 4 × 200 ms = 0.8 s of sustained silence
+const MAX_SPEECH_MS        = 8_000; // stop 8 s after first speech (noisy env fallback)
+const MAX_RECORD_MS        = 30_000; // hard cap if user never speaks
 
 interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
@@ -221,6 +224,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       if (Platform.OS !== "web") {
         let speechDetected = false;
         let silenceFrameCount = 0;
+        let peakDb = -160; // tracks the loudest frame since speech started
 
         silenceIntervalRef.current = setInterval(async () => {
           if (stateRef.current !== "listening") {
@@ -232,22 +236,41 @@ export function useVoice(options: UseVoiceOptions = {}) {
             const db: number = (status as any).metering ?? -160;
 
             if (!speechDetected) {
-              // Wait until user actually starts speaking before monitoring silence
+              // Wait for the user to start talking
               if (db > SPEECH_THRESHOLD_DB) {
                 speechDetected = true;
+                peakDb = db;
                 silenceFrameCount = 0;
+
+                // Max-speech timer: stop at most 8 s after first speech.
+                // This is the key fallback for noisy environments where the
+                // absolute silence threshold is never crossed.
+                setTimeout(() => {
+                  if (stateRef.current === "listening") {
+                    clearRecordingTimers();
+                    stopAndProcessRef.current?.();
+                  }
+                }, MAX_SPEECH_MS);
               }
             } else {
-              if (db < SILENCE_THRESHOLD_DB) {
+              // Update running peak while still speaking
+              if (db > peakDb) peakDb = db;
+
+              // Two ways to detect silence:
+              //  1. Absolute: level below the quiet floor
+              //  2. Relative: level dropped ≥ PEAK_DROP_DB from the speech peak
+              //     → works in noisy environments (music, traffic, etc.)
+              const isSilent =
+                db < SILENCE_THRESHOLD_DB || peakDb - db >= PEAK_DROP_DB;
+
+              if (isSilent) {
                 silenceFrameCount++;
                 if (silenceFrameCount >= SILENCE_FRAMES) {
-                  // Enough silence after speech — auto-stop
                   clearRecordingTimers();
                   stopAndProcessRef.current?.();
                 }
               } else {
-                // Still talking — reset the silence counter
-                silenceFrameCount = 0;
+                silenceFrameCount = 0; // still talking — reset counter
               }
             }
           } catch {
