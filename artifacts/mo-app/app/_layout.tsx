@@ -28,16 +28,36 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-// Configure how notifications appear when the app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// Expo Go SDK 53+ removed remote push from Android. The expo-notifications
+// package emits a console.error when imported, which triggers the red overlay.
+// Local scheduled notifications still work. Filter the known false-positive.
+const _origConsoleError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  const msg = typeof args[0] === "string" ? args[0] : "";
+  if (
+    msg.includes("expo-notifications") &&
+    msg.includes("removed from Expo Go")
+  ) {
+    return; // suppress — expected Expo Go SDK 53+ behaviour
+  }
+  _origConsoleError(...args);
+};
+
+// Configure foreground notification behaviour.
+// Wrapped in try/catch because Expo Go SDK 53+ throws for remote-push.
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch {
+  // Remote push not available in Expo Go SDK 53+ — safe to ignore
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

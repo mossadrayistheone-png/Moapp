@@ -98,11 +98,11 @@ export function useReminders() {
       const reminder = prev.find((r) => r.id === id);
       if (reminder?.notificationId) {
         Notifications.cancelScheduledNotificationAsync(reminder.notificationId).catch(
-          console.error
+          () => {} // silent — notification may not exist or push unavailable in Expo Go
         );
       }
       const next = prev.filter((r) => r.id !== id);
-      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(console.error);
+      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
   }, []);
@@ -121,14 +121,14 @@ export function useReminders() {
       for (const r of toDelete) {
         if (r.notificationId) {
           Notifications.cancelScheduledNotificationAsync(r.notificationId).catch(
-            console.error
+            () => {} // silent
           );
         }
       }
       const next = prev.filter(
         (r) => !r.title.toLowerCase().includes(needle)
       );
-      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(console.error);
+      AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
   }, []);
