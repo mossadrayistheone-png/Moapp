@@ -3,15 +3,52 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 export interface HealthStatus {
   status: string;
 }
 
-/**
- * The assistant personality mode
- */
+export type ConversationMessageRole =
+  (typeof ConversationMessageRole)[keyof typeof ConversationMessageRole];
+
+export const ConversationMessageRole = {
+  user: "user",
+  assistant: "assistant",
+} as const;
+
+export interface ConversationMessage {
+  role: ConversationMessageRole;
+  content: string;
+}
+
+export type UserPreferencesResponseLength =
+  (typeof UserPreferencesResponseLength)[keyof typeof UserPreferencesResponseLength];
+
+export const UserPreferencesResponseLength = {
+  short: "short",
+  medium: "medium",
+  long: "long",
+} as const;
+
+export interface UserPreferences {
+  name?: string;
+  location?: string;
+  timezone?: string;
+  responseLength?: UserPreferencesResponseLength;
+}
+
+export interface ReminderData {
+  title: string;
+  content: string;
+  datetime: string;
+}
+
+export interface NoteData {
+  content: string;
+  timestamp?: string;
+}
+
 export type ChatRequestMode =
   (typeof ChatRequestMode)[keyof typeof ChatRequestMode];
 
@@ -19,28 +56,27 @@ export const ChatRequestMode = {
   executive: "executive",
   creative: "creative",
   motivational: "motivational",
+  planner: "planner",
 } as const;
 
 export interface ChatRequest {
-  /** The user's spoken message */
   message: string;
-  /** The assistant personality mode */
   mode?: ChatRequestMode;
+  messages?: ConversationMessage[];
+  preferences?: UserPreferences;
 }
 
 export interface ChatResponse {
-  /** Mo's response text */
   reply: string;
+  functionCalled?: string;
+  reminder?: ReminderData;
+  note?: NoteData;
 }
 
 export interface SpeakRequest {
-  /** Text to convert to speech */
   text: string;
 }
 
-/**
- * Audio file format
- */
 export type VoiceRequestFormat =
   (typeof VoiceRequestFormat)[keyof typeof VoiceRequestFormat];
 
@@ -51,9 +87,6 @@ export const VoiceRequestFormat = {
   caf: "caf",
 } as const;
 
-/**
- * The assistant personality mode
- */
 export type VoiceRequestMode =
   (typeof VoiceRequestMode)[keyof typeof VoiceRequestMode];
 
@@ -61,24 +94,26 @@ export const VoiceRequestMode = {
   executive: "executive",
   creative: "creative",
   motivational: "motivational",
+  planner: "planner",
 } as const;
 
 export interface VoiceRequest {
   /** Base64-encoded audio file */
   audio: string;
-  /** Audio file format */
   format?: VoiceRequestFormat;
-  /** The assistant personality mode */
   mode?: VoiceRequestMode;
+  /** Previous conversation turns for continuity */
+  messages?: ConversationMessage[];
+  preferences?: UserPreferences;
 }
 
 export interface VoiceResponse {
-  /** What the user said */
   transcript: string;
-  /** Mo's text response */
   reply: string;
-  /** Base64-encoded MP3 audio of Mo's reply */
   audioBase64: string;
+  functionCalled?: string;
+  reminder?: ReminderData;
+  note?: NoteData;
 }
 
 export interface ErrorResponse {

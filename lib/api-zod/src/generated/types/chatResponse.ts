@@ -3,10 +3,14 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
+import type { NoteData } from "./noteData";
+import type { ReminderData } from "./reminderData";
 
 export interface ChatResponse {
-  /** Mo's response text */
   reply: string;
+  functionCalled?: string;
+  reminder?: ReminderData;
+  note?: NoteData;
 }

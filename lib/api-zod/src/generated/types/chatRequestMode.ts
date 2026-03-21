@@ -3,12 +3,9 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
-/**
- * The assistant personality mode
- */
 export type ChatRequestMode =
   (typeof ChatRequestMode)[keyof typeof ChatRequestMode];
 
@@ -16,4 +13,5 @@ export const ChatRequestMode = {
   executive: "executive",
   creative: "creative",
   motivational: "motivational",
+  planner: "planner",
 } as const;

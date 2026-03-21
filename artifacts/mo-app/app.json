@@ -46,6 +46,14 @@
         {
           "microphonePermission": "Mo needs microphone access to hear your voice."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#C9A84C",
+          "defaultChannel": "reminders"
+        }
       ]
     ],
     "experiments": {

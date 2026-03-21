@@ -3,15 +3,21 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
 export * from "./chatRequest";
 export * from "./chatRequestMode";
 export * from "./chatResponse";
+export * from "./conversationMessage";
+export * from "./conversationMessageRole";
 export * from "./errorResponse";
 export * from "./healthStatus";
+export * from "./noteData";
+export * from "./reminderData";
 export * from "./speakRequest";
+export * from "./userPreferences";
+export * from "./userPreferencesResponseLength";
 export * from "./voiceRequest";
 export * from "./voiceRequestFormat";
 export * from "./voiceRequestMode";

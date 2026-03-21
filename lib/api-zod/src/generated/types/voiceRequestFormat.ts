@@ -3,12 +3,9 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 
-/**
- * Audio file format
- */
 export type VoiceRequestFormat =
   (typeof VoiceRequestFormat)[keyof typeof VoiceRequestFormat];
 

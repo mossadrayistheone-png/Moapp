@@ -3,16 +3,19 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
+import type { ConversationMessage } from "./conversationMessage";
+import type { UserPreferences } from "./userPreferences";
 import type { VoiceRequestFormat } from "./voiceRequestFormat";
 import type { VoiceRequestMode } from "./voiceRequestMode";
 
 export interface VoiceRequest {
   /** Base64-encoded audio file */
   audio: string;
-  /** Audio file format */
   format?: VoiceRequestFormat;
-  /** The assistant personality mode */
   mode?: VoiceRequestMode;
+  /** Previous conversation turns for continuity */
+  messages?: ConversationMessage[];
+  preferences?: UserPreferences;
 }

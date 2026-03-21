@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Api
-  version: 0.1.0
+  version: 0.2.0
   description: Mo AI Voice Assistant API
 servers:
   - url: /api
@@ -17,7 +17,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -30,7 +29,6 @@ paths:
       operationId: moChat
       tags: [mo]
       summary: Send a message to Mo
-      description: Sends user text to OpenAI and returns Mo's response
       requestBody:
         required: true
         content:
@@ -55,7 +53,6 @@ paths:
       operationId: moSpeak
       tags: [mo]
       summary: Convert text to speech via ElevenLabs
-      description: Converts the given text to audio using ElevenLabs TTS
       requestBody:
         required: true
         content:
@@ -81,7 +78,6 @@ paths:
       operationId: moVoice
       tags: [mo]
       summary: Full voice pipeline for native mobile
-      description: Accepts base64-encoded audio, transcribes, gets Mo reply, synthesizes speech, returns all as JSON
       requestBody:
         required: true
         content:
@@ -108,37 +104,81 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
+    ConversationMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+      required: [role, content]
+    UserPreferences:
+      type: object
+      properties:
+        name:
+          type: string
+        location:
+          type: string
+        timezone:
+          type: string
+        responseLength:
+          type: string
+          enum: [short, medium, long]
+          default: medium
+    ReminderData:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        datetime:
+          type: string
+      required: [title, content, datetime]
+    NoteData:
+      type: object
+      properties:
+        content:
+          type: string
+        timestamp:
+          type: string
+      required: [content]
     ChatRequest:
       type: object
       properties:
         message:
           type: string
-          description: The user's spoken message
         mode:
           type: string
-          enum: [executive, creative, motivational]
-          description: The assistant personality mode
+          enum: [executive, creative, motivational, planner]
           default: executive
-      required:
-        - message
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationMessage"
+        preferences:
+          $ref: "#/components/schemas/UserPreferences"
+      required: [message]
     ChatResponse:
       type: object
       properties:
         reply:
           type: string
-          description: Mo's response text
-      required:
-        - reply
+        functionCalled:
+          type: string
+        reminder:
+          $ref: "#/components/schemas/ReminderData"
+        note:
+          $ref: "#/components/schemas/NoteData"
+      required: [reply]
     SpeakRequest:
       type: object
       properties:
         text:
           type: string
-          description: Text to convert to speech
-      required:
-        - text
+      required: [text]
     VoiceRequest:
       type: object
       properties:
@@ -149,34 +189,37 @@ components:
           type: string
           enum: [m4a, mp4, wav, caf]
           default: m4a
-          description: Audio file format
         mode:
           type: string
-          enum: [executive, creative, motivational]
+          enum: [executive, creative, motivational, planner]
           default: executive
-          description: The assistant personality mode
-      required:
-        - audio
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationMessage"
+          description: Previous conversation turns for continuity
+        preferences:
+          $ref: "#/components/schemas/UserPreferences"
+      required: [audio]
     VoiceResponse:
       type: object
       properties:
         transcript:
           type: string
-          description: What the user said
         reply:
           type: string
-          description: Mo's text response
         audioBase64:
           type: string
-          description: Base64-encoded MP3 audio of Mo's reply
-      required:
-        - transcript
-        - reply
-        - audioBase64
+        functionCalled:
+          type: string
+        reminder:
+          $ref: "#/components/schemas/ReminderData"
+        note:
+          $ref: "#/components/schemas/NoteData"
+      required: [transcript, reply, audioBase64]
     ErrorResponse:
       type: object
       properties:
         error:
           type: string
-      required:
-        - error
+      required: [error]

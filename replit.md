@@ -18,99 +18,107 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## Artifacts
 
-### `artifacts/mo` (`@workspace/mo`) — Mo: AI Voice Assistant
+### `artifacts/mo` (`@workspace/mo`) — Mo: AI Voice Assistant (Web)
 - React + Vite web app, served at `/`
 - Full voice flow: browser Web Speech API → OpenAI GPT-4o-mini → ElevenLabs TTS
-- State machine: idle → listening → thinking → speaking
-- Black and gold luxury design
+- Three personality modes: Executive, Creative, Motivational
+- Black and gold luxury design, background video
 - Key files: `src/pages/Home.tsx`, `src/components/MicButton.tsx`, `src/hooks/use-voice-assistant.ts`
-- Uses `@workspace/api-client-react` hooks (`useMoChat`, `useMoSpeak`)
+
+### `artifacts/mo-app` (`@workspace/mo-app`) — Mo: AI Voice Assistant (Native)
+- Expo React Native app, scanned via Expo Go QR code
+- Full voice pipeline: expo-av recording → base64 → Whisper transcription → GPT-4o-mini → ElevenLabs TTS → base64 MP3 → expo-av playback
+- Four personality modes: Executive, Creative, Motivational, Planner
+- Conversation continuity: last 10 turns sent with every request
+- Quick Notes: voice-captured notes saved to AsyncStorage
+- Reminders: local push notifications via expo-notifications, parsed by GPT
+- Settings: name, location, timezone, auto-play, response length, background video toggle
+- Fonts: Cormorant Garamond (display) + DM Sans (body)
+- Key files:
+  - `app/(tabs)/index.tsx` — main screen
+  - `app/settings.tsx` — settings screen
+  - `app/notes.tsx` — notes + reminders screen
+  - `context/AppContext.tsx` — preferences + conversation history
+  - `hooks/use-voice.ts` — voice pipeline hook
+  - `hooks/use-notes.ts` — notes management
+  - `hooks/use-reminders.ts` — reminders + expo-notifications
 
 ### API Routes (in `artifacts/api-server`)
-- `POST /api/mo/chat` — receives `{ message }`, returns `{ reply }` via OpenAI
-- `POST /api/mo/speak` — receives `{ text }`, returns `audio/mpeg` blob via ElevenLabs
+- `POST /api/mo/chat` — text chat with conversation history support, function calling
+- `POST /api/mo/speak` — TTS via ElevenLabs, returns audio/mpeg
+- `POST /api/mo/voice` — full pipeline: base64 audio → Whisper → GPT+tools → ElevenLabs → JSON response
 - Route file: `artifacts/api-server/src/routes/mo.ts`
+- Services:
+  - `src/services/weather.ts` — weather via wttr.in (no API key)
+  - `src/services/search.ts` — web search via Serper.dev (SERPER_API_KEY) or DuckDuckGo (free fallback)
+
+### OpenAI Function Calling Tools
+The voice/chat pipeline uses GPT-4o-mini function calling to support:
+- `get_weather(location)` — wttr.in, no API key
+- `get_datetime(timezone)` — server-side JS Date, no API key
+- `web_search(query)` — Serper.dev or DuckDuckGo
+- `set_reminder(title, content, datetime)` — parsed by GPT, scheduled by client
+- `save_note(content)` — captured by GPT, saved by client to AsyncStorage
 
 ### Required Secrets
-- `OPENAI_API_KEY` — OpenAI API key
+- `OPENAI_API_KEY` — OpenAI API key (Whisper + GPT-4o-mini)
 - `ELEVENLABS_API_KEY` — ElevenLabs API key
 - `ELEVENLABS_VOICE_ID` — ElevenLabs voice ID
+- `SERPER_API_KEY` *(optional)* — Serper.dev for Google-quality web search. Without it, falls back to DuckDuckGo + GPT knowledge.
 
 ## Structure
 
 ```text
 artifacts-monorepo/
-├── artifacts/              # Deployable applications
+├── artifacts/
+│   ├── mo/                 # React+Vite web app
+│   ├── mo-app/             # Expo React Native app
+│   │   ├── app/            # Expo Router screens
+│   │   │   ├── (tabs)/     # Tab group (single tab, no tab bar)
+│   │   │   ├── settings.tsx
+│   │   │   └── notes.tsx
+│   │   ├── context/        # React contexts (AppContext)
+│   │   ├── hooks/          # Custom hooks
+│   │   ├── components/     # Reusable UI components
+│   │   └── constants/      # Colors, etc.
 │   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
+│       └── src/
+│           ├── routes/     # mo.ts — all Mo routes
+│           └── services/   # weather.ts, search.ts
+├── lib/
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+├── scripts/
+└── pnpm-workspace.yaml
 ```
 
 ## TypeScript & Composite Projects
 
 Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+- **Always typecheck from the root** — run `pnpm run typecheck`
+- **`emitDeclarationOnly`** — only `.d.ts` files emitted; bundling by esbuild/vite/metro
+- **Project references** — A depends on B → A's tsconfig must list B in references
 
 ## Root Scripts
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+- `pnpm run build` — typecheck, then recursively build all packages
+- `pnpm run typecheck` — `tsc --build --emitDeclarationOnly`
 
 ## Packages
 
 ### `artifacts/api-server` (`@workspace/api-server`)
-
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
-
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
+Express 5 API server. All Mo routes in `src/routes/mo.ts`.
+- `pnpm --filter @workspace/api-server run dev`
+- `pnpm --filter @workspace/api-server run build`
 
 ### `lib/api-spec` (`@workspace/api-spec`)
+OpenAPI 3.1 spec (`openapi.yaml`) + Orval config. Run codegen:
+```
+pnpm --filter @workspace/api-spec run codegen
+```
 
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+### `lib/db` (`@workspace/db`)
+Drizzle ORM + PostgreSQL. In development: `pnpm --filter @workspace/db run push`.

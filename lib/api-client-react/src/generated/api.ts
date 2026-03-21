@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
@@ -36,7 +36,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -112,7 +111,6 @@ export function useHealthCheck<
 }
 
 /**
- * Sends user text to OpenAI and returns Mo's response
  * @summary Send a message to Mo
  */
 export const getMoChatUrl = () => {
@@ -199,7 +197,6 @@ export const useMoChat = <
 };
 
 /**
- * Converts the given text to audio using ElevenLabs TTS
  * @summary Convert text to speech via ElevenLabs
  */
 export const getMoSpeakUrl = () => {
@@ -286,7 +283,6 @@ export const useMoSpeak = <
 };
 
 /**
- * Accepts base64-encoded audio, transcribes, gets Mo reply, synthesizes speech, returns all as JSON
  * @summary Full voice pipeline for native mobile
  */
 export const getMoVoiceUrl = () => {

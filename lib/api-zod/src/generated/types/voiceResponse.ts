@@ -3,14 +3,16 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
+import type { NoteData } from "./noteData";
+import type { ReminderData } from "./reminderData";
 
 export interface VoiceResponse {
-  /** What the user said */
   transcript: string;
-  /** Mo's text response */
   reply: string;
-  /** Base64-encoded MP3 audio of Mo's reply */
   audioBase64: string;
+  functionCalled?: string;
+  reminder?: ReminderData;
+  note?: NoteData;
 }

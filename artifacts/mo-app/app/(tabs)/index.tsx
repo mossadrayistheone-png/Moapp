@@ -2,10 +2,10 @@ import { Feather } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useRef, useState } from "react";
+import { router } from "expo-router";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   Animated,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -16,45 +16,51 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MicButton } from "@/components/MicButton";
 import { WaveformBars } from "@/components/WaveformBars";
 import Colors from "@/constants/colors";
-import { type AssistantMode, useVoice } from "@/hooks/use-voice";
+import { useApp } from "@/context/AppContext";
+import { useNotes } from "@/hooks/use-notes";
+import { useReminders } from "@/hooks/use-reminders";
+import { useVoice, type AssistantMode } from "@/hooks/use-voice";
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const MODES: { key: AssistantMode; label: string }[] = [
   { key: "executive", label: "Executive" },
   { key: "creative", label: "Creative" },
   { key: "motivational", label: "Motivational" },
+  { key: "planner", label: "Planner" },
 ];
 
 const VIDEO_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}/background.mp4`;
 
+// ── Status label with animated dots ──────────────────────────────────────────
+
 function StatusLabel({ state }: { state: string }) {
-  const dot1 = useRef(new Animated.Value(1)).current;
-  const dot2 = useRef(new Animated.Value(0.3)).current;
-  const dot3 = useRef(new Animated.Value(0.3)).current;
+  const dots = [
+    useRef(new Animated.Value(1)).current,
+    useRef(new Animated.Value(0.3)).current,
+    useRef(new Animated.Value(0.3)).current,
+  ];
 
   useEffect(() => {
-    if (state === "listening" || state === "thinking") {
-      const animate = (d: Animated.Value, delay: number) =>
+    const animated = state === "listening" || state === "thinking";
+    if (animated) {
+      const loops = dots.map((d, i) =>
         Animated.loop(
           Animated.sequence([
-            Animated.delay(delay),
+            Animated.delay(i * 250),
             Animated.timing(d, { toValue: 1, duration: 350, useNativeDriver: true }),
             Animated.timing(d, { toValue: 0.3, duration: 350, useNativeDriver: true }),
           ])
-        ).start();
-      animate(dot1, 0);
-      animate(dot2, 250);
-      animate(dot3, 500);
+        )
+      );
+      loops.forEach((l) => l.start());
+      return () => loops.forEach((l) => l.stop());
     } else {
-      dot1.stopAnimation();
-      dot2.stopAnimation();
-      dot3.stopAnimation();
-      dot1.setValue(1);
-      dot2.setValue(1);
-      dot3.setValue(1);
+      dots.forEach((d) => d.setValue(1));
     }
   }, [state]);
 
-  const baseLabel =
+  const label =
     state === "idle"
       ? "Tap to speak"
       : state === "listening"
@@ -63,17 +69,17 @@ function StatusLabel({ state }: { state: string }) {
       ? "Processing"
       : state === "speaking"
       ? "Tap to stop"
-      : "Something went wrong";
+      : "Try again";
 
   const showDots = state === "listening" || state === "thinking";
 
   return (
-    <View style={styles.statusRow}>
-      <Text style={styles.statusText}>{baseLabel}</Text>
+    <View style={status.row}>
+      <Text style={status.text}>{label}</Text>
       {showDots && (
-        <View style={styles.dotRow}>
-          {[dot1, dot2, dot3].map((d, i) => (
-            <Animated.Text key={i} style={[styles.statusDot, { opacity: d }]}>
+        <View style={status.dotRow}>
+          {dots.map((d, i) => (
+            <Animated.Text key={i} style={[status.dot, { opacity: d }]}>
               ·
             </Animated.Text>
           ))}
@@ -83,10 +89,42 @@ function StatusLabel({ state }: { state: string }) {
   );
 }
 
+// ── Main screen ───────────────────────────────────────────────────────────────
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { preferences, conversationHistory, addToHistory } = useApp();
+  const { addNote } = useNotes();
+  const { addReminder, upcomingReminders } = useReminders();
+
+  const voiceCallbacks = {
+    onNote: useCallback(
+      (content: string) => addNote(content, "voice"),
+      [addNote]
+    ),
+    onReminder: useCallback(
+      (params: { title: string; content: string; datetime: string }) =>
+        addReminder(params),
+      [addReminder]
+    ),
+    onTurnComplete: useCallback(
+      (transcript: string, reply: string) => addToHistory(transcript, reply),
+      [addToHistory]
+    ),
+  };
+
   const { state, mode, setMode, transcript, reply, errorMessage, toggle } =
-    useVoice();
+    useVoice({
+      conversationHistory,
+      preferences: {
+        name: preferences.name || undefined,
+        location: preferences.location || undefined,
+        timezone: preferences.timezone || undefined,
+        responseLength: preferences.responseLength,
+      },
+      autoplay: preferences.autoplay,
+      callbacks: voiceCallbacks,
+    });
 
   const videoRef = useRef<Video>(null);
 
@@ -126,57 +164,94 @@ export default function HomeScreen() {
     setMode(m);
   };
 
+  const hasConversation = conversationHistory.length > 0;
+
   return (
     <View style={styles.root}>
       {/* Background video */}
-      <Video
-        ref={videoRef}
-        source={{ uri: VIDEO_URL }}
-        style={StyleSheet.absoluteFillObject}
-        resizeMode={ResizeMode.COVER}
-        isLooping
-        isMuted
-        shouldPlay
-        onLoad={async (status: any) => {
-          if (status.durationMillis && videoRef.current) {
-            const randomMs = Math.random() * status.durationMillis * 0.7;
-            await videoRef.current.setPositionAsync(randomMs);
-          }
-        }}
-      />
+      {preferences.backgroundEnabled && (
+        <Video
+          ref={videoRef}
+          source={{ uri: VIDEO_URL }}
+          style={StyleSheet.absoluteFillObject}
+          resizeMode={ResizeMode.COVER}
+          isLooping
+          isMuted
+          shouldPlay
+          onLoad={async (s: any) => {
+            if (s.durationMillis && videoRef.current) {
+              await videoRef.current.setPositionAsync(
+                Math.random() * s.durationMillis * 0.7
+              );
+            }
+          }}
+        />
+      )}
 
-      {/* Cinematic scrim — heavy at bottom */}
+      {/* Scrim — bottom-heavy for legibility */}
       <LinearGradient
         colors={[
-          "rgba(0,0,0,0.15)",
-          "rgba(0,0,0,0.25)",
+          "rgba(0,0,0,0.12)",
+          "rgba(0,0,0,0.22)",
           "rgba(0,0,0,0.55)",
-          "rgba(0,0,0,0.88)",
+          "rgba(0,0,0,0.90)",
         ]}
         locations={[0, 0.3, 0.65, 1]}
         style={StyleSheet.absoluteFillObject}
       />
 
-      {/* Full height content container */}
+      {/* Content */}
       <View
         style={[
           styles.content,
           {
-            paddingTop: insets.top + 20,
-            paddingBottom: Math.max(insets.bottom, 20) + 16,
+            paddingTop: insets.top + 16,
+            paddingBottom: Math.max(insets.bottom, 20) + 12,
           },
         ]}
       >
-        {/* ── Header ── */}
-        <View style={styles.header}>
-          <Text style={styles.brand}>Mo.</Text>
-          <Text style={styles.tagline}>Private Intelligence</Text>
+        {/* ── Header row ── */}
+        <View style={styles.headerRow}>
+          {/* Notes button */}
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push("/notes");
+            }}
+            style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Feather name="file-text" size={18} color={Colors.mutedWhite} />
+            {upcomingReminders.length > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {upcomingReminders.length > 9 ? "9+" : upcomingReminders.length}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+
+          {/* Brand */}
+          <View style={styles.brand}>
+            <Text style={styles.brandName}>Mo.</Text>
+            <Text style={styles.brandTagline}>Private Intelligence</Text>
+          </View>
+
+          {/* Settings button */}
+          <Pressable
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push("/settings");
+            }}
+            style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Feather name="settings" size={18} color={Colors.mutedWhite} />
+          </Pressable>
         </View>
 
-        {/* ── Mode Switcher ── */}
+        {/* ── Mode switcher ── */}
         <View style={styles.modeRow}>
           {MODES.map(({ key, label }) => {
-            const isActive = mode === key;
+            const active = mode === key;
             return (
               <Pressable
                 key={key}
@@ -187,31 +262,38 @@ export default function HomeScreen() {
                 ]}
               >
                 <Text
-                  style={[
-                    styles.modeText,
-                    isActive && styles.modeTextActive,
-                  ]}
+                  style={[styles.modeText, active && styles.modeTextActive]}
+                  numberOfLines={1}
                 >
                   {label}
                 </Text>
-                {isActive && <View style={styles.modeUnderline} />}
+                {active && <View style={styles.modeUnderline} />}
               </Pressable>
             );
           })}
         </View>
 
-        {/* ── Centre Text Area ── */}
+        {/* ── Text area ── */}
         <View style={styles.textArea}>
           {state === "idle" && !transcript && !reply && (
-            <Text style={styles.idlePrompt}>
-              Ask anything. Mo listens.
-            </Text>
+            <View style={styles.idleBlock}>
+              <Text style={styles.idlePrompt}>
+                {preferences.name
+                  ? `Good to hear you, ${preferences.name.split(" ")[0]}.`
+                  : "Ask anything. Mo listens."}
+              </Text>
+              {hasConversation && (
+                <Text style={styles.continuityHint}>
+                  Conversation continues from last session
+                </Text>
+              )}
+            </View>
           )}
 
           {state === "error" && (
             <View style={styles.errorCard}>
-              <Feather name="alert-circle" size={20} color={Colors.gold} />
-              <Text style={styles.errorText}>
+              <Feather name="alert-circle" size={18} color={Colors.gold} />
+              <Text style={styles.errorText} numberOfLines={3}>
                 {errorMessage || "Something went wrong. Please try again."}
               </Text>
             </View>
@@ -222,30 +304,23 @@ export default function HomeScreen() {
               style={[styles.transcriptBlock, { opacity: transcriptOpacity }]}
             >
               <Text style={styles.transcriptLabel}>You said</Text>
-              <Text style={styles.transcriptText}>{transcript}</Text>
+              <Text style={styles.transcriptText}>"{transcript}"</Text>
             </Animated.View>
           ) : null}
 
           {reply ? (
-            <Animated.Text
-              style={[styles.replyText, { opacity: replyOpacity }]}
-            >
+            <Animated.Text style={[styles.replyText, { opacity: replyOpacity }]}>
               {reply}
             </Animated.Text>
           ) : null}
         </View>
 
-        {/* ── Bottom Controls ── */}
+        {/* ── Bottom controls ── */}
         <View style={styles.bottom}>
-          {/* Waveform when speaking */}
-          <View style={styles.waveformContainer}>
+          <View style={styles.waveformBox}>
             <WaveformBars active={state === "speaking"} />
           </View>
-
-          {/* Mic button */}
           <MicButton state={state} onPress={toggle} />
-
-          {/* Status label */}
           <StatusLabel state={state} />
         </View>
       </View>
@@ -253,60 +328,75 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.black,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 28,
-  },
+// ── Styles ────────────────────────────────────────────────────────────────────
 
-  // Header
-  header: {
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.black },
+  content: { flex: 1, paddingHorizontal: 24 },
+
+  headerRow: {
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 28,
+    justifyContent: "space-between",
+    marginBottom: 20,
   },
-  brand: {
+  iconButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: Colors.gold,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+  },
+  badgeText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 8,
+    color: Colors.black,
+  },
+  brand: { alignItems: "center", gap: 1 },
+  brandName: {
     fontFamily: "CormorantGaramond_500Medium",
-    fontSize: 42,
+    fontSize: 34,
     color: Colors.gold,
     letterSpacing: 3,
-    lineHeight: 50,
+    lineHeight: 40,
   },
-  tagline: {
+  brandTagline: {
     fontFamily: "DMSans_300Light",
-    fontSize: 11,
+    fontSize: 9,
     color: Colors.mutedWhite,
-    letterSpacing: 4,
+    letterSpacing: 3.5,
     textTransform: "uppercase",
-    marginTop: 2,
   },
 
   // Mode switcher
   modeRow: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 28,
-    marginBottom: 20,
+    gap: 18,
+    marginBottom: 16,
   },
-  modeButton: {
-    alignItems: "center",
-    paddingVertical: 4,
-  },
+  modeButton: { alignItems: "center", paddingVertical: 4 },
   modeText: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.mutedWhite,
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
-  modeTextActive: {
-    color: Colors.gold,
-  },
+  modeTextActive: { color: Colors.gold },
   modeUnderline: {
-    marginTop: 4,
+    marginTop: 3,
     height: 1,
     width: "100%",
     backgroundColor: Colors.gold,
@@ -317,26 +407,36 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    gap: 24,
     paddingHorizontal: 8,
-    gap: 28,
   },
+  idleBlock: { alignItems: "center", gap: 8 },
   idlePrompt: {
     fontFamily: "CormorantGaramond_400Regular_Italic",
-    fontSize: 26,
-    color: "rgba(255,255,255,0.18)",
+    fontSize: 24,
+    color: "rgba(255,255,255,0.16)",
     textAlign: "center",
-    lineHeight: 36,
+    lineHeight: 34,
+  },
+  continuityHint: {
+    fontFamily: "DMSans_300Light",
+    fontSize: 10,
+    color: "rgba(201,168,76,0.35)",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    textAlign: "center",
   },
   errorCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "rgba(201,168,76,0.08)",
+    backgroundColor: "rgba(201,168,76,0.07)",
     borderWidth: 1,
-    borderColor: "rgba(201,168,76,0.2)",
-    borderRadius: 12,
+    borderColor: "rgba(201,168,76,0.18)",
+    borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    maxWidth: "90%",
   },
   errorText: {
     fontFamily: "DMSans_400Regular",
@@ -345,63 +445,48 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 20,
   },
-  transcriptBlock: {
-    gap: 6,
-    alignItems: "center",
-  },
+  transcriptBlock: { alignItems: "center", gap: 6 },
   transcriptLabel: {
     fontFamily: "DMSans_300Light",
-    fontSize: 10,
+    fontSize: 9,
     color: Colors.mutedWhite,
     letterSpacing: 3,
     textTransform: "uppercase",
   },
   transcriptText: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 15,
-    color: "rgba(255,255,255,0.5)",
+    fontSize: 14,
+    color: "rgba(255,255,255,0.45)",
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 20,
     fontStyle: "italic",
   },
   replyText: {
     fontFamily: "CormorantGaramond_400Regular_Italic",
-    fontSize: 30,
+    fontSize: 28,
     color: Colors.offWhite,
     textAlign: "center",
-    lineHeight: 42,
+    lineHeight: 40,
     paddingHorizontal: 4,
   },
 
-  // Bottom controls
-  bottom: {
-    alignItems: "center",
-    gap: 12,
-    marginTop: 20,
-  },
-  waveformContainer: {
-    height: 36,
-    justifyContent: "center",
-  },
+  // Bottom
+  bottom: { alignItems: "center", gap: 10, marginTop: 16 },
+  waveformBox: { height: 36, justifyContent: "center" },
+});
 
-  // Status label
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 20,
-  },
-  statusText: {
+// Status label styles
+const status = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", height: 20 },
+  text: {
     fontFamily: "DMSans_300Light",
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.mutedWhite,
-    letterSpacing: 2,
+    letterSpacing: 2.5,
     textTransform: "uppercase",
   },
-  dotRow: {
-    flexDirection: "row",
-    marginLeft: 2,
-  },
-  statusDot: {
+  dotRow: { flexDirection: "row", marginLeft: 2 },
+  dot: {
     fontFamily: "DMSans_400Regular",
     fontSize: 20,
     color: Colors.gold,

@@ -8,7 +8,26 @@ export type AssistantState =
   | "thinking"
   | "speaking"
   | "error";
-export type AssistantMode = "executive" | "creative" | "motivational";
+export type AssistantMode = "executive" | "creative" | "motivational" | "planner";
+export type ResponseLength = "short" | "medium" | "long";
+
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface UserPreferences {
+  name?: string;
+  location?: string;
+  timezone?: string;
+  responseLength?: ResponseLength;
+}
+
+export interface VoiceCallbacks {
+  onNote?: (content: string) => void;
+  onReminder?: (params: { title: string; content: string; datetime: string }) => void;
+  onTurnComplete?: (transcript: string, reply: string) => void;
+}
 
 const BASE_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
 
@@ -35,7 +54,17 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
   web: {},
 };
 
-export function useVoice() {
+interface UseVoiceOptions {
+  conversationHistory?: ConversationMessage[];
+  preferences?: UserPreferences;
+  autoplay?: boolean;
+  callbacks?: VoiceCallbacks;
+}
+
+export function useVoice(options: UseVoiceOptions = {}) {
+  const { conversationHistory = [], preferences, autoplay = true, callbacks } =
+    options;
+
   const [state, setState] = useState<AssistantState>("idle");
   const [mode, setMode] = useState<AssistantMode>("executive");
   const [transcript, setTranscript] = useState("");
@@ -46,7 +75,7 @@ export function useVoice() {
   const soundRef = useRef<Audio.Sound | null>(null);
   const stateRef = useRef<AssistantState>("idle");
 
-  const setStateWithRef = (s: AssistantState) => {
+  const setStateSync = (s: AssistantState) => {
     stateRef.current = s;
     setState(s);
   };
@@ -56,8 +85,8 @@ export function useVoice() {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         setErrorMessage("Microphone permission denied.");
-        setStateWithRef("error");
-        setTimeout(() => setStateWithRef("idle"), 3000);
+        setStateSync("error");
+        setTimeout(() => setStateSync("idle"), 3000);
         return;
       }
 
@@ -72,12 +101,12 @@ export function useVoice() {
       recordingRef.current = recording;
       setTranscript("");
       setReply("");
-      setStateWithRef("listening");
+      setStateSync("listening");
     } catch (err) {
       console.error("Failed to start recording:", err);
       setErrorMessage("Could not start recording.");
-      setStateWithRef("error");
-      setTimeout(() => setStateWithRef("idle"), 3000);
+      setStateSync("error");
+      setTimeout(() => setStateSync("idle"), 3000);
     }
   }, []);
 
@@ -96,45 +125,81 @@ export function useVoice() {
       });
 
       if (!uri) {
-        setStateWithRef("idle");
+        setStateSync("idle");
         return;
       }
 
-      setStateWithRef("thinking");
+      setStateSync("thinking");
 
       const audioBase64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
+      // Build conversation history for API (last 10 turns)
+      const recentHistory = conversationHistory.slice(-10).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
       const response = await fetch(`${BASE_URL}/api/mo/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audio: audioBase64, format: "m4a", mode }),
+        body: JSON.stringify({
+          audio: audioBase64,
+          format: "m4a",
+          mode,
+          messages: recentHistory,
+          preferences: preferences
+            ? {
+                name: preferences.name,
+                location: preferences.location,
+                timezone: preferences.timezone,
+                responseLength: preferences.responseLength,
+              }
+            : undefined,
+        }),
       });
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body?.error ?? `Server error ${response.status}`);
+        throw new Error((body as any)?.error ?? `Server error ${response.status}`);
       }
 
-      const data = await response.json();
-      const {
-        transcript: tx,
-        reply: rp,
-        audioBase64: audiob64,
-      } = data as {
+      const data = await response.json() as {
         transcript: string;
         reply: string;
         audioBase64: string;
+        functionCalled?: string;
+        reminder?: { title: string; content: string; datetime: string };
+        note?: { content: string };
       };
 
-      if (!tx.trim() || !rp || !audiob64) {
-        setStateWithRef("idle");
+      const { transcript: tx, reply: rp, audioBase64: audiob64 } = data;
+
+      if (!tx?.trim() || !rp) {
+        setStateSync("idle");
         return;
       }
 
       setTranscript(tx);
       setReply(rp);
+
+      // Handle side effects from tool calls
+      if (data.note?.content) {
+        callbacks?.onNote?.(data.note.content);
+      }
+      if (data.reminder) {
+        callbacks?.onReminder?.(data.reminder);
+      }
+
+      // Notify parent of completed turn
+      callbacks?.onTurnComplete?.(tx, rp);
+
+      // Play audio if autoplay and audio provided
+      if (!autoplay || !audiob64) {
+        setStateSync("idle");
+        return;
+      }
 
       const audioPath = `${FileSystem.cacheDirectory}mo-reply.mp3`;
       await FileSystem.writeAsStringAsync(audioPath, audiob64, {
@@ -142,7 +207,7 @@ export function useVoice() {
       });
 
       // Natural pre-speech pause
-      await new Promise<void>((resolve) => setTimeout(resolve, 650));
+      await new Promise<void>((resolve) => setTimeout(resolve, 600));
 
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
@@ -157,38 +222,34 @@ export function useVoice() {
 
       sound.setOnPlaybackStatusUpdate((status) => {
         if ("didJustFinish" in status && status.didJustFinish) {
-          setStateWithRef("idle");
+          setStateSync("idle");
           sound.unloadAsync();
         }
       });
 
-      setStateWithRef("speaking");
+      setStateSync("speaking");
       await sound.playAsync();
     } catch (err: any) {
       console.error("Voice pipeline error:", err);
       setErrorMessage(err?.message ?? "Something went wrong.");
-      setStateWithRef("error");
-      setTimeout(() => setStateWithRef("idle"), 3000);
+      setStateSync("error");
+      setTimeout(() => setStateSync("idle"), 3000);
     }
-  }, [mode]);
+  }, [mode, conversationHistory, preferences, autoplay, callbacks]);
 
   const stopSpeaking = useCallback(async () => {
     if (soundRef.current) {
       await soundRef.current.stopAsync();
       soundRef.current = null;
     }
-    setStateWithRef("idle");
+    setStateSync("idle");
   }, []);
 
   const toggle = useCallback(() => {
     const s = stateRef.current;
-    if (s === "idle" || s === "error") {
-      startRecording();
-    } else if (s === "listening") {
-      stopAndProcess();
-    } else if (s === "speaking") {
-      stopSpeaking();
-    }
+    if (s === "idle" || s === "error") startRecording();
+    else if (s === "listening") stopAndProcess();
+    else if (s === "speaking") stopSpeaking();
   }, [startRecording, stopAndProcess, stopSpeaking]);
 
   return {

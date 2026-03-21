@@ -3,13 +3,15 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import type { ChatRequestMode } from "./chatRequestMode";
+import type { ConversationMessage } from "./conversationMessage";
+import type { UserPreferences } from "./userPreferences";
 
 export interface ChatRequest {
-  /** The user's spoken message */
   message: string;
-  /** The assistant personality mode */
   mode?: ChatRequestMode;
+  messages?: ConversationMessage[];
+  preferences?: UserPreferences;
 }

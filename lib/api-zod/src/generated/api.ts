@@ -3,12 +3,11 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.1.0
+ * OpenAPI spec version: 0.2.0
  */
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -16,52 +15,113 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Sends user text to OpenAI and returns Mo's response
  * @summary Send a message to Mo
  */
 export const moChatBodyModeDefault = `executive`;
+export const moChatBodyPreferencesResponseLengthDefault = `medium`;
 
 export const MoChatBody = zod.object({
-  message: zod.string().describe("The user's spoken message"),
+  message: zod.string(),
   mode: zod
-    .enum(["executive", "creative", "motivational"])
-    .default(moChatBodyModeDefault)
-    .describe("The assistant personality mode"),
+    .enum(["executive", "creative", "motivational", "planner"])
+    .default(moChatBodyModeDefault),
+  messages: zod
+    .array(
+      zod.object({
+        role: zod.enum(["user", "assistant"]),
+        content: zod.string(),
+      }),
+    )
+    .optional(),
+  preferences: zod
+    .object({
+      name: zod.string().optional(),
+      location: zod.string().optional(),
+      timezone: zod.string().optional(),
+      responseLength: zod
+        .enum(["short", "medium", "long"])
+        .default(moChatBodyPreferencesResponseLengthDefault),
+    })
+    .optional(),
 });
 
 export const MoChatResponse = zod.object({
-  reply: zod.string().describe("Mo's response text"),
+  reply: zod.string(),
+  functionCalled: zod.string().optional(),
+  reminder: zod
+    .object({
+      title: zod.string(),
+      content: zod.string(),
+      datetime: zod.string(),
+    })
+    .optional(),
+  note: zod
+    .object({
+      content: zod.string(),
+      timestamp: zod.string().optional(),
+    })
+    .optional(),
 });
 
 /**
- * Converts the given text to audio using ElevenLabs TTS
  * @summary Convert text to speech via ElevenLabs
  */
 export const MoSpeakBody = zod.object({
-  text: zod.string().describe("Text to convert to speech"),
+  text: zod.string(),
 });
 
 /**
- * Accepts base64-encoded audio, transcribes, gets Mo reply, synthesizes speech, returns all as JSON
  * @summary Full voice pipeline for native mobile
  */
 export const moVoiceBodyFormatDefault = `m4a`;
 export const moVoiceBodyModeDefault = `executive`;
+export const moVoiceBodyPreferencesResponseLengthDefault = `medium`;
 
 export const MoVoiceBody = zod.object({
   audio: zod.string().describe("Base64-encoded audio file"),
   format: zod
     .enum(["m4a", "mp4", "wav", "caf"])
-    .default(moVoiceBodyFormatDefault)
-    .describe("Audio file format"),
+    .default(moVoiceBodyFormatDefault),
   mode: zod
-    .enum(["executive", "creative", "motivational"])
-    .default(moVoiceBodyModeDefault)
-    .describe("The assistant personality mode"),
+    .enum(["executive", "creative", "motivational", "planner"])
+    .default(moVoiceBodyModeDefault),
+  messages: zod
+    .array(
+      zod.object({
+        role: zod.enum(["user", "assistant"]),
+        content: zod.string(),
+      }),
+    )
+    .optional()
+    .describe("Previous conversation turns for continuity"),
+  preferences: zod
+    .object({
+      name: zod.string().optional(),
+      location: zod.string().optional(),
+      timezone: zod.string().optional(),
+      responseLength: zod
+        .enum(["short", "medium", "long"])
+        .default(moVoiceBodyPreferencesResponseLengthDefault),
+    })
+    .optional(),
 });
 
 export const MoVoiceResponse = zod.object({
-  transcript: zod.string().describe("What the user said"),
-  reply: zod.string().describe("Mo's text response"),
-  audioBase64: zod.string().describe("Base64-encoded MP3 audio of Mo's reply"),
+  transcript: zod.string(),
+  reply: zod.string(),
+  audioBase64: zod.string(),
+  functionCalled: zod.string().optional(),
+  reminder: zod
+    .object({
+      title: zod.string(),
+      content: zod.string(),
+      datetime: zod.string(),
+    })
+    .optional(),
+  note: zod
+    .object({
+      content: zod.string(),
+      timestamp: zod.string().optional(),
+    })
+    .optional(),
 });
