@@ -90,6 +90,19 @@ interface ReminderAction {
   title: string;
 }
 
+interface NoteContext {
+  id: string;
+  content: string;
+  title?: string;
+  category?: string;
+  timestamp: number;
+}
+
+interface NoteAction {
+  action: "delete";
+  keyword: string;
+}
+
 // ── OpenAI tool definitions ──────────────────────────────────────────────────
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -172,13 +185,41 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "save_note",
       description:
-        "Save a quick note. Call when the user says 'note', 'write this down', 'remember this', 'capture', or similar — but NOT for personal facts (use save_memory) or to-dos (use add_task).",
+        "Save a quick note or captured idea. Call when the user says 'take a note', 'note this', 'save this idea', 'write this down', 'capture', 'remember this' — but NOT for personal facts (use save_memory) or to-dos (use add_task).",
       parameters: {
         type: "object",
         properties: {
-          content: { type: "string", description: "The full note content" },
+          content: { type: "string", description: "The full note content, verbatim or lightly cleaned" },
+          title: {
+            type: "string",
+            description: "Short title for the note (3–6 words max). Extract the essence — e.g. 'Luxury real estate voiceovers' or 'Call the agency'.",
+          },
+          category: {
+            type: "string",
+            enum: ["idea", "meeting", "personal", "work", "other"],
+            description: "Optional: best-fit category for the note.",
+          },
         },
         required: ["content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_note",
+      description:
+        "Delete a saved note. Call when the user says 'delete my note about X', 'remove the X note', 'clear that note', 'delete the note about X'.",
+      parameters: {
+        type: "object",
+        properties: {
+          keyword: {
+            type: "string",
+            description:
+              "A distinctive keyword or phrase from the note's title or content. Partial match is fine — e.g. 'groceries' to match 'Buy groceries for dinner'.",
+          },
+        },
+        required: ["keyword"],
       },
     },
   },
@@ -352,7 +393,10 @@ async function executeTool(
       return `Reminder set: "${args.title}" at ${args.datetime}. Confirm to the user warmly, in one sentence.`;
 
     case "save_note":
-      return `Note captured: "${args.content}". Confirm to the user warmly, in one sentence.`;
+      return `Note captured: "${args.title ?? args.content}". Confirm to the user warmly, in one sentence — e.g. "Noted — saved under Ideas." or just "Got it, saved."`;
+
+    case "delete_note":
+      return `Note about "${args.keyword}" deleted. Confirm in one sentence — e.g. "Done, that note is gone."`;
 
     case "save_memory":
       return `Memory saved: ${args.category} / "${args.key}" = "${args.value}". Confirm naturally in one sentence — e.g. "I'll keep that in mind." Keep it brief and warm.`;
@@ -504,6 +548,30 @@ function buildRemindersSection(reminders: ReminderContext[]): string {
   return `\n\nUser's upcoming reminders (${upcoming.length} total):\n${lines.join("\n")}\n\nWhen asked about reminders, reference them naturally. To delete a reminder, call delete_reminder with the title keyword.`;
 }
 
+function buildNotesSection(notes: NoteContext[]): string {
+  if (!notes?.length) return "";
+
+  const formatAge = (ts: number): string => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60_000);
+    const hours = Math.floor(diff / 3_600_000);
+    const days = Math.floor(diff / 86_400_000);
+    if (mins < 60) return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days === 1) return "yesterday";
+    if (days < 7) return `${days}d ago`;
+    return new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  };
+
+  const lines = notes.slice(0, 10).map((n) => {
+    const catPart = n.category ? `[${n.category}] ` : "";
+    const titlePart = n.title ? n.title : n.content.slice(0, 60) + (n.content.length > 60 ? "…" : "");
+    return `• ${catPart}${titlePart} — ${formatAge(n.timestamp)}`;
+  });
+
+  return `\n\nUser's recent notes (${notes.length} total):\n${lines.join("\n")}\n\nWhen asked about notes, reference them naturally. To delete a note, call delete_note with a keyword from its content or title.`;
+}
+
 function buildSystemPrompt(
   mode: string,
   preferences: {
@@ -514,7 +582,8 @@ function buildSystemPrompt(
   } | null,
   memories?: MemoryItem[],
   tasks?: Task[],
-  reminders?: ReminderContext[]
+  reminders?: ReminderContext[],
+  notes?: NoteContext[]
 ): string {
   const base = MODE_PROMPTS[mode] ?? MODE_PROMPTS.executive;
   const now = new Date().toUTCString();
@@ -546,6 +615,9 @@ function buildSystemPrompt(
   const reminderSection = buildRemindersSection(reminders ?? []);
   if (reminderSection) parts.push(reminderSection);
 
+  const noteSection = buildNotesSection(notes ?? []);
+  if (noteSection) parts.push(noteSection);
+
   return parts.join(" ");
 }
 
@@ -553,7 +625,8 @@ type ToolCallResult = {
   functionCalled: string;
   reminder?: { title: string; content: string; datetime: string };
   reminderAction?: ReminderAction;
-  note?: { content: string };
+  note?: { content: string; title?: string; category?: string };
+  noteAction?: NoteAction;
   memoryAction?: MemoryAction;
   taskAction?: TaskAction;
 };
@@ -601,7 +674,14 @@ async function runWithTools(
     };
   }
   if (toolName === "save_note") {
-    toolResult.note = { content: toolArgs.content ?? "" };
+    toolResult.note = {
+      content: toolArgs.content ?? "",
+      title: toolArgs.title,
+      category: toolArgs.category,
+    };
+  }
+  if (toolName === "delete_note") {
+    toolResult.noteAction = { action: "delete", keyword: toolArgs.keyword ?? "" };
   }
   if (toolName === "save_memory") {
     toolResult.memoryAction = {
@@ -657,7 +737,7 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const { message, mode = "executive", messages = [], preferences, memories, tasks, reminders } =
+  const { message, mode = "executive", messages = [], preferences, memories, tasks, reminders, notes } =
     parsed.data;
 
   const systemPrompt = buildSystemPrompt(
@@ -665,7 +745,8 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
     preferences ?? null,
     (memories as MemoryItem[]) ?? [],
     (tasks as Task[]) ?? [],
-    (reminders as ReminderContext[]) ?? []
+    (reminders as ReminderContext[]) ?? [],
+    (notes as NoteContext[]) ?? []
   );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
@@ -685,6 +766,7 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
       reminder: toolResult?.reminder,
       reminderAction: toolResult?.reminderAction,
       note: toolResult?.note,
+      noteAction: toolResult?.noteAction,
       memoryAction: toolResult?.memoryAction,
       taskAction: toolResult?.taskAction,
     });
@@ -728,6 +810,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     memories,
     tasks,
     reminders,
+    notes,
   } = parsed.data;
 
   const systemPrompt = buildSystemPrompt(
@@ -735,7 +818,8 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     preferences ?? null,
     (memories as MemoryItem[]) ?? [],
     (tasks as Task[]) ?? [],
-    (reminders as ReminderContext[]) ?? []
+    (reminders as ReminderContext[]) ?? [],
+    (notes as NoteContext[]) ?? []
   );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
@@ -793,6 +877,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       reminder: toolResult?.reminder,
       reminderAction: toolResult?.reminderAction,
       note: toolResult?.note,
+      noteAction: toolResult?.noteAction,
       memoryAction: toolResult?.memoryAction,
       taskAction: toolResult?.taskAction,
     });

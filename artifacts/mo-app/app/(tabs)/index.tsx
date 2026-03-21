@@ -19,7 +19,7 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
-import { useVoice, type AssistantMode, type MemoryActionPayload, type ReminderActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
+import { useVoice, type AssistantMode, type MemoryActionPayload, type NoteActionPayload, type NotePayload, type ReminderActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -105,13 +105,22 @@ export default function HomeScreen() {
     completeTaskByTitle,
     deleteTaskByTitle,
   } = useApp();
-  const { addNote } = useNotes();
+  const { notes, addNote, deleteNoteByKeyword } = useNotes();
   const { addReminder, deleteReminderByTitle, upcomingReminders, reminders } = useReminders();
 
   const voiceCallbacks = {
     onNote: useCallback(
-      (content: string) => addNote(content, "voice"),
+      (note: NotePayload) =>
+        addNote({ content: note.content, title: note.title, category: note.category, source: "voice" }),
       [addNote]
+    ),
+    onNoteAction: useCallback(
+      (action: NoteActionPayload) => {
+        if (action.action === "delete" && action.keyword) {
+          deleteNoteByKeyword(action.keyword);
+        }
+      },
+      [deleteNoteByKeyword]
     ),
     onReminder: useCallback(
       (params: { title: string; content: string; datetime: string }) =>
@@ -164,6 +173,7 @@ export default function HomeScreen() {
       memories,
       tasks,
       reminders,
+      notes,
       preferences: {
         name: preferences.name || undefined,
         location: preferences.location || undefined,

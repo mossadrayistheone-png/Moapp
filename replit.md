@@ -30,7 +30,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - Full voice pipeline: expo-av recording → base64 → Whisper transcription → GPT-4o-mini → ElevenLabs TTS → base64 MP3 → expo-av playback
 - Four personality modes: Executive, Creative, Motivational, Planner
 - Conversation continuity: last 10 turns sent with every request
-- Quick Notes: voice-captured notes saved to AsyncStorage
+- Notes: full CRUD via voice — save with optional title + category pill, delete by keyword; notes injected into system prompt for context; NoteCard shows title, color-coded category pill, mic/pen source icon
 - Reminders: local push notifications via expo-notifications, parsed by GPT
 - Settings: name, location, timezone, auto-play, response length, background video toggle
 - Fonts: Cormorant Garamond (display) + DM Sans (body)

@@ -3,10 +3,15 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.6.0
  */
 
+/** New note created by Mo (returned in response) */
 export interface NoteData {
   content: string;
+  /** Short title extracted from note content (3–6 words) */
+  title?: string;
+  /** Optional category: idea | meeting | personal | work | other */
+  category?: string;
   timestamp?: string;
 }

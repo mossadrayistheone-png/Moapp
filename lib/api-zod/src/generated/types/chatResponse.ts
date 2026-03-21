@@ -3,9 +3,10 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 import type { MemoryAction } from "./memoryAction";
+import type { NoteAction } from "./noteAction";
 import type { NoteData } from "./noteData";
 import type { ReminderAction } from "./reminderAction";
 import type { ReminderData } from "./reminderData";
@@ -17,6 +18,7 @@ export interface ChatResponse {
   reminder?: ReminderData;
   reminderAction?: ReminderAction;
   note?: NoteData;
+  noteAction?: NoteAction;
   memoryAction?: MemoryAction;
   taskAction?: TaskAction;
 }

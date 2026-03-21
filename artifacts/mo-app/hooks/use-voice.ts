@@ -2,6 +2,7 @@ import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useRef, useState } from "react";
 import type { MemoryItem, Task } from "@/context/AppContext";
+import type { Note } from "@/hooks/use-notes";
 import type { Reminder } from "@/hooks/use-reminders";
 
 export type AssistantState =
@@ -44,8 +45,20 @@ export interface ReminderActionPayload {
   title: string;
 }
 
+export interface NotePayload {
+  content: string;
+  title?: string;
+  category?: string;
+}
+
+export interface NoteActionPayload {
+  action: "delete";
+  keyword: string;
+}
+
 export interface VoiceCallbacks {
-  onNote?: (content: string) => void;
+  onNote?: (note: NotePayload) => void;
+  onNoteAction?: (action: NoteActionPayload) => void;
   onReminder?: (params: { title: string; content: string; datetime: string }) => void;
   onReminderAction?: (action: ReminderActionPayload) => void;
   onMemoryAction?: (action: MemoryActionPayload) => void;
@@ -83,6 +96,7 @@ interface UseVoiceOptions {
   memories?: MemoryItem[];
   tasks?: Task[];
   reminders?: Reminder[];
+  notes?: Note[];
   preferences?: UserPreferences;
   autoplay?: boolean;
   callbacks?: VoiceCallbacks;
@@ -94,6 +108,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
     memories = [],
     tasks = [],
     reminders = [],
+    notes = [],
     preferences,
     autoplay = true,
     callbacks,
@@ -210,6 +225,15 @@ export function useVoice(options: UseVoiceOptions = {}) {
           datetime: r.datetime,
         }));
 
+      // Serialize recent notes for the API (most recent first, last 10)
+      const notesForApi = notes.slice(0, 10).map((n) => ({
+        id: n.id,
+        content: n.content,
+        title: n.title,
+        category: n.category,
+        timestamp: n.timestamp,
+      }));
+
       const response = await fetch(`${BASE_URL}/api/mo/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,6 +245,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
           memories: memoriesForApi,
           tasks: tasksForApi,
           reminders: remindersForApi,
+          notes: notesForApi,
           preferences: preferences
             ? {
                 name: preferences.name,
@@ -244,7 +269,8 @@ export function useVoice(options: UseVoiceOptions = {}) {
         functionCalled?: string;
         reminder?: { title: string; content: string; datetime: string };
         reminderAction?: ReminderActionPayload;
-        note?: { content: string };
+        note?: NotePayload;
+        noteAction?: NoteActionPayload;
         memoryAction?: MemoryActionPayload;
         taskAction?: TaskActionPayload;
       };
@@ -261,7 +287,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       // Handle side effects from tool calls
       if (data.note?.content) {
-        callbacks?.onNote?.(data.note.content);
+        callbacks?.onNote?.({ content: data.note.content, title: data.note.title, category: data.note.category });
+      }
+      if (data.noteAction) {
+        callbacks?.onNoteAction?.(data.noteAction);
       }
       if (data.reminder) {
         callbacks?.onReminder?.(data.reminder);

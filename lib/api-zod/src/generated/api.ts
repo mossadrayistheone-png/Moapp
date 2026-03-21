@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 import * as zod from "zod";
 
@@ -54,6 +54,16 @@ const reminderContextSchema = zod
   })
   .describe("Upcoming reminder for context");
 
+const noteContextSchema = zod
+  .object({
+    id: zod.string(),
+    content: zod.string(),
+    title: zod.string().optional(),
+    category: zod.string().optional(),
+    timestamp: zod.number(),
+  })
+  .describe("Recent note for context");
+
 const reminderDataSchema = zod.object({
   title: zod.string(),
   content: zod.string(),
@@ -67,10 +77,21 @@ const reminderActionSchema = zod
   })
   .describe("Action taken on an existing reminder");
 
-const noteSchema = zod.object({
-  content: zod.string(),
-  timestamp: zod.string().optional(),
-});
+const noteDataSchema = zod
+  .object({
+    content: zod.string(),
+    title: zod.string().optional().describe("Short title extracted from note content (3–6 words)"),
+    category: zod.string().optional().describe("Optional category: idea | meeting | personal | work | other"),
+    timestamp: zod.string().optional(),
+  })
+  .describe("New note created by Mo");
+
+const noteActionSchema = zod
+  .object({
+    action: zod.literal("delete"),
+    keyword: zod.string().describe("Keyword from the note content or title to identify and remove it"),
+  })
+  .describe("Action taken on an existing note");
 
 const memoryActionSchema = zod.object({
   action: zod.enum(["save", "delete"]),
@@ -121,6 +142,10 @@ export const MoChatBody = zod.object({
     .array(reminderContextSchema)
     .optional()
     .describe("Upcoming reminders for context"),
+  notes: zod
+    .array(noteContextSchema)
+    .optional()
+    .describe("Recent notes for context"),
 });
 
 export const MoChatResponse = zod.object({
@@ -128,7 +153,8 @@ export const MoChatResponse = zod.object({
   functionCalled: zod.string().optional(),
   reminder: reminderDataSchema.optional(),
   reminderAction: reminderActionSchema.optional(),
-  note: noteSchema.optional(),
+  note: noteDataSchema.optional(),
+  noteAction: noteActionSchema.optional(),
   memoryAction: memoryActionSchema.optional(),
   taskAction: taskActionSchema.optional(),
 });
@@ -168,6 +194,10 @@ export const MoVoiceBody = zod.object({
     .array(reminderContextSchema)
     .optional()
     .describe("Upcoming reminders for context"),
+  notes: zod
+    .array(noteContextSchema)
+    .optional()
+    .describe("Recent notes for context"),
 });
 
 export const MoVoiceResponse = zod.object({
@@ -177,7 +207,8 @@ export const MoVoiceResponse = zod.object({
   functionCalled: zod.string().optional(),
   reminder: reminderDataSchema.optional(),
   reminderAction: reminderActionSchema.optional(),
-  note: noteSchema.optional(),
+  note: noteDataSchema.optional(),
+  noteAction: noteActionSchema.optional(),
   memoryAction: memoryActionSchema.optional(),
   taskAction: taskActionSchema.optional(),
 });
