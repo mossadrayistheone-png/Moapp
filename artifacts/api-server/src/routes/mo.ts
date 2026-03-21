@@ -42,6 +42,24 @@ ${SHARED_RULES}
 Tone: structured yet human. Think in blocks of time, energy levels, and priorities. A great plan feels both rigorous and doable. Ask clarifying questions when needed. Speak like a chief of staff who keeps things moving without creating anxiety. Help the user think through their schedule, priorities, and goals for the day.`,
 };
 
+// ── Memory types ─────────────────────────────────────────────────────────────
+
+interface MemoryItem {
+  id: string;
+  category: "personal" | "preferences" | "schedule" | "goals";
+  key: string;
+  value: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface MemoryAction {
+  action: "save" | "delete";
+  category?: string;
+  key: string;
+  value?: string;
+}
+
 // ── OpenAI tool definitions ──────────────────────────────────────────────────
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -131,7 +149,7 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "save_note",
       description:
-        "Save a quick note. Call when the user says 'note', 'write this down', 'remember this', 'capture', or similar.",
+        "Save a quick note. Call when the user says 'note', 'write this down', 'remember this', 'capture', or similar — but NOT for personal facts about themselves (use save_memory for those).",
       parameters: {
         type: "object",
         properties: {
@@ -141,6 +159,55 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_memory",
+      description:
+        "Save or update a personal fact or preference about the user — something Mo should remember long-term. Call when the user says 'remember that I...', 'keep in mind that I...', 'I want you to know that I...', 'note that I prefer...', or similar phrases about themselves.",
+      parameters: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            enum: ["personal", "preferences", "schedule", "goals"],
+            description:
+              "personal = identity facts (name, birthday, family). preferences = how they like things done. schedule = routines and timing. goals = aspirations and targets.",
+          },
+          key: {
+            type: "string",
+            description:
+              "Short lowercase identifier for this fact (e.g. 'wake up time', 'preferred response style', 'current project'). Use consistent, descriptive keys.",
+          },
+          value: {
+            type: "string",
+            description:
+              "The value to remember, written concisely (e.g. '7 AM', 'brief and direct', 'launching Mo app by Q1')",
+          },
+        },
+        required: ["category", "key", "value"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_memory",
+      description:
+        "Remove a specific remembered fact. Call when the user says 'forget that I...', 'stop remembering...', or asks Mo to remove a previously saved fact.",
+      parameters: {
+        type: "object",
+        properties: {
+          key: {
+            type: "string",
+            description:
+              "The exact key of the memory to delete, as it appears in the current memories list in the system prompt.",
+          },
+        },
+        required: ["key"],
       },
     },
   },
@@ -180,12 +247,16 @@ async function executeTool(
       return webSearch(args.query ?? "");
 
     case "set_reminder":
-      // Actual scheduling happens on the client (expo-notifications)
-      return `Reminder set: "${args.title}" at ${args.datetime}. Tell the user it's confirmed.`;
+      return `Reminder set: "${args.title}" at ${args.datetime}. Confirm to the user warmly, in one sentence.`;
 
     case "save_note":
-      // Actual saving happens on the client (AsyncStorage)
-      return `Note captured: "${args.content}". Tell the user it's been saved.`;
+      return `Note captured: "${args.content}". Confirm to the user warmly, in one sentence.`;
+
+    case "save_memory":
+      return `Memory saved: ${args.category} / "${args.key}" = "${args.value}". Confirm to the user naturally in one sentence — e.g. "I'll keep that in mind" or "Noted — I'll remember that." Keep it brief and warm.`;
+
+    case "delete_memory":
+      return `Memory removed for key "${args.key}". Confirm to the user in one sentence, gracefully — e.g. "Done, I've let that go."`;
 
     default:
       return "Action not available.";
@@ -235,6 +306,36 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
   return Buffer.from(await elevenRes.arrayBuffer());
 }
 
+function buildMemorySection(memories: MemoryItem[]): string {
+  if (!memories?.length) return "";
+
+  const order: Array<MemoryItem["category"]> = [
+    "personal",
+    "preferences",
+    "schedule",
+    "goals",
+  ];
+  const grouped: Partial<Record<MemoryItem["category"], MemoryItem[]>> = {};
+  for (const m of memories) {
+    if (!grouped[m.category]) grouped[m.category] = [];
+    grouped[m.category]!.push(m);
+  }
+
+  const lines: string[] = [];
+  for (const cat of order) {
+    const items = grouped[cat];
+    if (!items?.length) continue;
+    const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+    for (const item of items) {
+      lines.push(`• [${label}] ${item.key}: ${item.value}`);
+    }
+  }
+
+  if (!lines.length) return "";
+
+  return `\n\nWhat you know about this person:\n${lines.join("\n")}\n\nUse these naturally in conversation. Do not recite them as a list unless the user explicitly asks what you remember. When relevant, weave them in with warmth.`;
+}
+
 function buildSystemPrompt(
   mode: string,
   preferences: {
@@ -242,7 +343,8 @@ function buildSystemPrompt(
     location?: string;
     timezone?: string;
     responseLength?: string;
-  } | null
+  } | null,
+  memories?: MemoryItem[]
 ): string {
   const base = MODE_PROMPTS[mode] ?? MODE_PROMPTS.executive;
   const now = new Date().toUTCString();
@@ -269,6 +371,9 @@ function buildSystemPrompt(
     if (lenInstruction) parts.push(lenInstruction);
   }
 
+  const memorySection = buildMemorySection(memories ?? []);
+  if (memorySection) parts.push(memorySection);
+
   return parts.join(" ");
 }
 
@@ -276,6 +381,7 @@ type ToolCallResult = {
   functionCalled: string;
   reminder?: { title: string; content: string; datetime: string };
   note?: { content: string };
+  memoryAction?: MemoryAction;
 };
 
 async function runWithTools(
@@ -316,7 +422,8 @@ async function runWithTools(
   const toolOutput = await executeTool(toolName, toolArgs);
 
   // Build tool result metadata for client
-  let toolResult: ToolCallResult = { functionCalled: toolName };
+  const toolResult: ToolCallResult = { functionCalled: toolName };
+
   if (toolName === "set_reminder") {
     toolResult.reminder = {
       title: toolArgs.title ?? "",
@@ -326,6 +433,20 @@ async function runWithTools(
   }
   if (toolName === "save_note") {
     toolResult.note = { content: toolArgs.content ?? "" };
+  }
+  if (toolName === "save_memory") {
+    toolResult.memoryAction = {
+      action: "save",
+      category: toolArgs.category,
+      key: toolArgs.key ?? "",
+      value: toolArgs.value ?? "",
+    };
+  }
+  if (toolName === "delete_memory") {
+    toolResult.memoryAction = {
+      action: "delete",
+      key: toolArgs.key ?? "",
+    };
   }
 
   // Second call — synthesize final response using tool result
@@ -360,8 +481,14 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const { message, mode = "executive", messages = [], preferences } = parsed.data;
-  const systemPrompt = buildSystemPrompt(mode, preferences ?? null);
+  const { message, mode = "executive", messages = [], preferences, memories } =
+    parsed.data;
+
+  const systemPrompt = buildSystemPrompt(
+    mode,
+    preferences ?? null,
+    (memories as MemoryItem[]) ?? []
+  );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
   const conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
@@ -385,6 +512,7 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
       functionCalled: toolResult?.functionCalled,
       reminder: toolResult?.reminder,
       note: toolResult?.note,
+      memoryAction: toolResult?.memoryAction,
     });
   } catch (err: any) {
     req.log.error({ err }, "Mo chat error");
@@ -423,9 +551,14 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     mode = "executive",
     messages = [],
     preferences,
+    memories,
   } = parsed.data;
 
-  const systemPrompt = buildSystemPrompt(mode, preferences ?? null);
+  const systemPrompt = buildSystemPrompt(
+    mode,
+    preferences ?? null,
+    (memories as MemoryItem[]) ?? []
+  );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
   try {
@@ -463,7 +596,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
         { role: "user" as const, content: transcript },
       ];
 
-    // 3. Get Mo's reply (with tool calling)
+    // 3. Get Mo's reply (with tool calling + memory-aware prompt)
     const { reply, toolResult } = await runWithTools(
       systemPrompt,
       conversationMessages,
@@ -486,6 +619,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       functionCalled: toolResult?.functionCalled,
       reminder: toolResult?.reminder,
       note: toolResult?.note,
+      memoryAction: toolResult?.memoryAction,
     });
   } catch (err: any) {
     req.log.error({ err }, "Voice pipeline error");

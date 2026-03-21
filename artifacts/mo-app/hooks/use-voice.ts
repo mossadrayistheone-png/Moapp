@@ -1,6 +1,7 @@
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
 import { useCallback, useRef, useState } from "react";
+import type { MemoryItem } from "@/context/AppContext";
 
 export type AssistantState =
   | "idle"
@@ -23,9 +24,17 @@ export interface UserPreferences {
   responseLength?: ResponseLength;
 }
 
+export interface MemoryActionPayload {
+  action: "save" | "delete";
+  category?: string;
+  key: string;
+  value?: string;
+}
+
 export interface VoiceCallbacks {
   onNote?: (content: string) => void;
   onReminder?: (params: { title: string; content: string; datetime: string }) => void;
+  onMemoryAction?: (action: MemoryActionPayload) => void;
   onTurnComplete?: (transcript: string, reply: string) => void;
 }
 
@@ -56,14 +65,20 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
 
 interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
+  memories?: MemoryItem[];
   preferences?: UserPreferences;
   autoplay?: boolean;
   callbacks?: VoiceCallbacks;
 }
 
 export function useVoice(options: UseVoiceOptions = {}) {
-  const { conversationHistory = [], preferences, autoplay = true, callbacks } =
-    options;
+  const {
+    conversationHistory = [],
+    memories = [],
+    preferences,
+    autoplay = true,
+    callbacks,
+  } = options;
 
   const [state, setState] = useState<AssistantState>("idle");
   const [mode, setMode] = useState<AssistantMode>("executive");
@@ -135,10 +150,20 @@ export function useVoice(options: UseVoiceOptions = {}) {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      // Build conversation history for API (last 10 turns)
+      // Last 10 conversation turns for continuity
       const recentHistory = conversationHistory.slice(-10).map((m) => ({
         role: m.role,
         content: m.content,
+      }));
+
+      // Serialize memories for the API (omit internal ids/timestamps for brevity)
+      const memoriesForApi = memories.map((m) => ({
+        id: m.id,
+        category: m.category,
+        key: m.key,
+        value: m.value,
+        createdAt: m.createdAt,
+        updatedAt: m.updatedAt,
       }));
 
       const response = await fetch(`${BASE_URL}/api/mo/voice`, {
@@ -149,6 +174,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
           format: "m4a",
           mode,
           messages: recentHistory,
+          memories: memoriesForApi,
           preferences: preferences
             ? {
                 name: preferences.name,
@@ -165,13 +191,14 @@ export function useVoice(options: UseVoiceOptions = {}) {
         throw new Error((body as any)?.error ?? `Server error ${response.status}`);
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         transcript: string;
         reply: string;
         audioBase64: string;
         functionCalled?: string;
         reminder?: { title: string; content: string; datetime: string };
         note?: { content: string };
+        memoryAction?: MemoryActionPayload;
       };
 
       const { transcript: tx, reply: rp, audioBase64: audiob64 } = data;
@@ -190,6 +217,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
       }
       if (data.reminder) {
         callbacks?.onReminder?.(data.reminder);
+      }
+      if (data.memoryAction) {
+        callbacks?.onMemoryAction?.(data.memoryAction);
       }
 
       // Notify parent of completed turn
@@ -235,7 +265,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       setStateSync("error");
       setTimeout(() => setStateSync("idle"), 3000);
     }
-  }, [mode, conversationHistory, preferences, autoplay, callbacks]);
+  }, [mode, conversationHistory, memories, preferences, autoplay, callbacks]);
 
   const stopSpeaking = useCallback(async () => {
     if (soundRef.current) {

@@ -19,7 +19,7 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
-import { useVoice, type AssistantMode } from "@/hooks/use-voice";
+import { useVoice, type AssistantMode, type MemoryActionPayload } from "@/hooks/use-voice";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -93,7 +93,14 @@ function StatusLabel({ state }: { state: string }) {
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { preferences, conversationHistory, addToHistory } = useApp();
+  const {
+    preferences,
+    conversationHistory,
+    addToHistory,
+    memories,
+    saveMemory,
+    deleteMemoryByKey,
+  } = useApp();
   const { addNote } = useNotes();
   const { addReminder, upcomingReminders } = useReminders();
 
@@ -107,6 +114,20 @@ export default function HomeScreen() {
         addReminder(params),
       [addReminder]
     ),
+    onMemoryAction: useCallback(
+      (action: MemoryActionPayload) => {
+        if (action.action === "save" && action.category && action.key && action.value) {
+          saveMemory({
+            category: action.category as any,
+            key: action.key,
+            value: action.value,
+          });
+        } else if (action.action === "delete" && action.key) {
+          deleteMemoryByKey(action.key);
+        }
+      },
+      [saveMemory, deleteMemoryByKey]
+    ),
     onTurnComplete: useCallback(
       (transcript: string, reply: string) => addToHistory(transcript, reply),
       [addToHistory]
@@ -116,6 +137,7 @@ export default function HomeScreen() {
   const { state, mode, setMode, transcript, reply, errorMessage, toggle } =
     useVoice({
       conversationHistory,
+      memories,
       preferences: {
         name: preferences.name || undefined,
         location: preferences.location || undefined,
@@ -165,6 +187,7 @@ export default function HomeScreen() {
   };
 
   const hasConversation = conversationHistory.length > 0;
+  const memoryCount = memories.length;
 
   return (
     <View style={styles.root}>
@@ -188,7 +211,7 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* Scrim — bottom-heavy for legibility */}
+      {/* Scrim */}
       <LinearGradient
         colors={[
           "rgba(0,0,0,0.12)",
@@ -212,7 +235,7 @@ export default function HomeScreen() {
       >
         {/* ── Header row ── */}
         <View style={styles.headerRow}>
-          {/* Notes button */}
+          {/* Notes / Memory button */}
           <Pressable
             onPress={() => {
               Haptics.selectionAsync();
@@ -221,6 +244,7 @@ export default function HomeScreen() {
             style={({ pressed }) => [styles.iconButton, { opacity: pressed ? 0.6 : 1 }]}
           >
             <Feather name="file-text" size={18} color={Colors.mutedWhite} />
+            {/* Reminder badge */}
             {upcomingReminders.length > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
@@ -234,6 +258,11 @@ export default function HomeScreen() {
           <View style={styles.brand}>
             <Text style={styles.brandName}>Mo.</Text>
             <Text style={styles.brandTagline}>Private Intelligence</Text>
+            {memoryCount > 0 && (
+              <Text style={styles.memoryHint}>
+                {memoryCount} {memoryCount === 1 ? "memory" : "memories"}
+              </Text>
+            )}
           </View>
 
           {/* Settings button */}
@@ -377,6 +406,14 @@ const styles = StyleSheet.create({
     color: Colors.mutedWhite,
     letterSpacing: 3.5,
     textTransform: "uppercase",
+  },
+  memoryHint: {
+    fontFamily: "DMSans_300Light",
+    fontSize: 8,
+    color: "rgba(201,168,76,0.40)",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    marginTop: 2,
   },
 
   // Mode switcher

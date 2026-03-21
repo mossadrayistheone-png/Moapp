@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 
 export * from "./chatRequest";
@@ -13,6 +13,11 @@ export * from "./conversationMessage";
 export * from "./conversationMessageRole";
 export * from "./errorResponse";
 export * from "./healthStatus";
+export * from "./memoryAction";
+export * from "./memoryActionAction";
+export * from "./memoryActionCategory";
+export * from "./memoryItem";
+export * from "./memoryItemCategory";
 export * from "./noteData";
 export * from "./reminderData";
 export * from "./speakRequest";

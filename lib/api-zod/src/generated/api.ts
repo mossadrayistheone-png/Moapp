@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 import * as zod from "zod";
 
@@ -43,6 +43,23 @@ export const MoChatBody = zod.object({
         .default(moChatBodyPreferencesResponseLengthDefault),
     })
     .optional(),
+  memories: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          category: zod.enum(["personal", "preferences", "schedule", "goals"]),
+          key: zod
+            .string()
+            .describe('Short identifier for the fact, e.g. \"wake up time\"'),
+          value: zod.string().describe('The value, e.g. \"7 AM\"'),
+          createdAt: zod.number(),
+          updatedAt: zod.number(),
+        })
+        .describe("A single remembered fact about the user"),
+    )
+    .optional()
+    .describe("Current remembered facts about the user"),
 });
 
 export const MoChatResponse = zod.object({
@@ -61,6 +78,17 @@ export const MoChatResponse = zod.object({
       timestamp: zod.string().optional(),
     })
     .optional(),
+  memoryAction: zod
+    .object({
+      action: zod.enum(["save", "delete"]),
+      category: zod
+        .enum(["personal", "preferences", "schedule", "goals"])
+        .optional(),
+      key: zod.string(),
+      value: zod.string().optional(),
+    })
+    .optional()
+    .describe("Memory operation triggered by this response"),
 });
 
 /**
@@ -104,6 +132,23 @@ export const MoVoiceBody = zod.object({
         .default(moVoiceBodyPreferencesResponseLengthDefault),
     })
     .optional(),
+  memories: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          category: zod.enum(["personal", "preferences", "schedule", "goals"]),
+          key: zod
+            .string()
+            .describe('Short identifier for the fact, e.g. \"wake up time\"'),
+          value: zod.string().describe('The value, e.g. \"7 AM\"'),
+          createdAt: zod.number(),
+          updatedAt: zod.number(),
+        })
+        .describe("A single remembered fact about the user"),
+    )
+    .optional()
+    .describe("Current remembered facts about the user"),
 });
 
 export const MoVoiceResponse = zod.object({
@@ -124,4 +169,15 @@ export const MoVoiceResponse = zod.object({
       timestamp: zod.string().optional(),
     })
     .optional(),
+  memoryAction: zod
+    .object({
+      action: zod.enum(["save", "delete"]),
+      category: zod
+        .enum(["personal", "preferences", "schedule", "goals"])
+        .optional(),
+      key: zod.string(),
+      value: zod.string().optional(),
+    })
+    .optional()
+    .describe("Memory operation triggered by this response"),
 });

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Api
-  version: 0.2.0
+  version: 0.3.0
   description: Mo AI Voice Assistant API
 servers:
   - url: /api
@@ -127,6 +127,41 @@ components:
           type: string
           enum: [short, medium, long]
           default: medium
+    MemoryItem:
+      type: object
+      description: A single remembered fact about the user
+      properties:
+        id:
+          type: string
+        category:
+          type: string
+          enum: [personal, preferences, schedule, goals]
+        key:
+          type: string
+          description: Short identifier for the fact, e.g. "wake up time"
+        value:
+          type: string
+          description: The value, e.g. "7 AM"
+        createdAt:
+          type: number
+        updatedAt:
+          type: number
+      required: [id, category, key, value, createdAt, updatedAt]
+    MemoryAction:
+      type: object
+      description: Memory operation triggered by this response
+      properties:
+        action:
+          type: string
+          enum: [save, delete]
+        category:
+          type: string
+          enum: [personal, preferences, schedule, goals]
+        key:
+          type: string
+        value:
+          type: string
+      required: [action, key]
     ReminderData:
       type: object
       properties:
@@ -160,6 +195,11 @@ components:
             $ref: "#/components/schemas/ConversationMessage"
         preferences:
           $ref: "#/components/schemas/UserPreferences"
+        memories:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryItem"
+          description: Current remembered facts about the user
       required: [message]
     ChatResponse:
       type: object
@@ -172,6 +212,8 @@ components:
           $ref: "#/components/schemas/ReminderData"
         note:
           $ref: "#/components/schemas/NoteData"
+        memoryAction:
+          $ref: "#/components/schemas/MemoryAction"
       required: [reply]
     SpeakRequest:
       type: object
@@ -200,6 +242,11 @@ components:
           description: Previous conversation turns for continuity
         preferences:
           $ref: "#/components/schemas/UserPreferences"
+        memories:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryItem"
+          description: Current remembered facts about the user
       required: [audio]
     VoiceResponse:
       type: object
@@ -216,6 +263,8 @@ components:
           $ref: "#/components/schemas/ReminderData"
         note:
           $ref: "#/components/schemas/NoteData"
+        memoryAction:
+          $ref: "#/components/schemas/MemoryAction"
       required: [transcript, reply, audioBase64]
     ErrorResponse:
       type: object

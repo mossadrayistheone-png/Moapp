@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.2.0
+ * OpenAPI spec version: 0.3.0
  */
 export interface HealthStatus {
   status: string;
@@ -38,6 +38,58 @@ export interface UserPreferences {
   responseLength?: UserPreferencesResponseLength;
 }
 
+export type MemoryItemCategory =
+  (typeof MemoryItemCategory)[keyof typeof MemoryItemCategory];
+
+export const MemoryItemCategory = {
+  personal: "personal",
+  preferences: "preferences",
+  schedule: "schedule",
+  goals: "goals",
+} as const;
+
+/**
+ * A single remembered fact about the user
+ */
+export interface MemoryItem {
+  id: string;
+  category: MemoryItemCategory;
+  /** Short identifier for the fact, e.g. "wake up time" */
+  key: string;
+  /** The value, e.g. "7 AM" */
+  value: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type MemoryActionAction =
+  (typeof MemoryActionAction)[keyof typeof MemoryActionAction];
+
+export const MemoryActionAction = {
+  save: "save",
+  delete: "delete",
+} as const;
+
+export type MemoryActionCategory =
+  (typeof MemoryActionCategory)[keyof typeof MemoryActionCategory];
+
+export const MemoryActionCategory = {
+  personal: "personal",
+  preferences: "preferences",
+  schedule: "schedule",
+  goals: "goals",
+} as const;
+
+/**
+ * Memory operation triggered by this response
+ */
+export interface MemoryAction {
+  action: MemoryActionAction;
+  category?: MemoryActionCategory;
+  key: string;
+  value?: string;
+}
+
 export interface ReminderData {
   title: string;
   content: string;
@@ -64,6 +116,8 @@ export interface ChatRequest {
   mode?: ChatRequestMode;
   messages?: ConversationMessage[];
   preferences?: UserPreferences;
+  /** Current remembered facts about the user */
+  memories?: MemoryItem[];
 }
 
 export interface ChatResponse {
@@ -71,6 +125,7 @@ export interface ChatResponse {
   functionCalled?: string;
   reminder?: ReminderData;
   note?: NoteData;
+  memoryAction?: MemoryAction;
 }
 
 export interface SpeakRequest {
@@ -105,6 +160,8 @@ export interface VoiceRequest {
   /** Previous conversation turns for continuity */
   messages?: ConversationMessage[];
   preferences?: UserPreferences;
+  /** Current remembered facts about the user */
+  memories?: MemoryItem[];
 }
 
 export interface VoiceResponse {
@@ -114,6 +171,7 @@ export interface VoiceResponse {
   functionCalled?: string;
   reminder?: ReminderData;
   note?: NoteData;
+  memoryAction?: MemoryAction;
 }
 
 export interface ErrorResponse {

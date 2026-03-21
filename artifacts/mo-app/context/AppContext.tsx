@@ -14,6 +14,17 @@ import type { AssistantMode } from "@/hooks/use-voice";
 
 export type ResponseLength = "short" | "medium" | "long";
 
+export type MemoryCategory = "personal" | "preferences" | "schedule" | "goals";
+
+export interface MemoryItem {
+  id: string;
+  category: MemoryCategory;
+  key: string;
+  value: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface UserPreferences {
   name: string;
   location: string;
@@ -36,6 +47,11 @@ interface AppContextValue {
   conversationHistory: ConversationMessage[];
   addToHistory: (transcript: string, reply: string) => void;
   clearHistory: () => void;
+  memories: MemoryItem[];
+  saveMemory: (params: { category: MemoryCategory; key: string; value: string }) => void;
+  deleteMemoryById: (id: string) => void;
+  deleteMemoryByKey: (key: string) => void;
+  clearMemories: () => void;
   isLoaded: boolean;
 }
 
@@ -61,6 +77,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 
 const PREFS_KEY = "@mo:preferences";
 const HISTORY_KEY = "@mo:conversationHistory";
+const MEMORY_KEY = "@mo:memories";
 const MAX_HISTORY = 20;
 
 // ── Context ──────────────────────────────────────────────────────────────────
@@ -73,25 +90,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [conversationHistory, setConversationHistory] = useState<
     ConversationMessage[]
   >([]);
+  const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load from storage
+  // Load all persistent state from storage on mount
   useEffect(() => {
     const load = async () => {
       try {
-        const [prefsRaw, historyRaw] = await Promise.all([
+        const [prefsRaw, historyRaw, memoriesRaw] = await Promise.all([
           AsyncStorage.getItem(PREFS_KEY),
           AsyncStorage.getItem(HISTORY_KEY),
+          AsyncStorage.getItem(MEMORY_KEY),
         ]);
 
         if (prefsRaw) {
           const saved = JSON.parse(prefsRaw) as Partial<UserPreferences>;
           setPreferences((prev) => ({ ...prev, ...saved }));
         }
-
         if (historyRaw) {
           setConversationHistory(JSON.parse(historyRaw));
+        }
+        if (memoriesRaw) {
+          setMemories(JSON.parse(memoriesRaw));
         }
       } catch (err) {
         console.error("Failed to load app state:", err);
@@ -102,11 +123,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     load();
   }, []);
 
+  // ── Preferences ──────────────────────────────────────────────────────────
+
   const updatePreferences = useCallback(
     (updates: Partial<UserPreferences>) => {
       setPreferences((prev) => {
         const next = { ...prev, ...updates };
-        // Debounced save
         if (saveTimeout.current) clearTimeout(saveTimeout.current);
         saveTimeout.current = setTimeout(() => {
           AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)).catch(
@@ -119,25 +141,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  // ── Conversation history ──────────────────────────────────────────────────
+
   const addToHistory = useCallback((transcript: string, reply: string) => {
     setConversationHistory((prev) => {
       const next = [
         ...prev,
-        {
-          role: "user" as const,
-          content: transcript,
-          timestamp: Date.now(),
-        },
-        {
-          role: "assistant" as const,
-          content: reply,
-          timestamp: Date.now() + 1,
-        },
+        { role: "user" as const, content: transcript, timestamp: Date.now() },
+        { role: "assistant" as const, content: reply, timestamp: Date.now() + 1 },
       ].slice(-MAX_HISTORY);
-
-      AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(next)).catch(
-        console.error
-      );
+      AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(next)).catch(console.error);
       return next;
     });
   }, []);
@@ -145,6 +158,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const clearHistory = useCallback(() => {
     setConversationHistory([]);
     AsyncStorage.removeItem(HISTORY_KEY).catch(console.error);
+  }, []);
+
+  // ── Memory ────────────────────────────────────────────────────────────────
+
+  const persistMemories = useCallback((items: MemoryItem[]) => {
+    AsyncStorage.setItem(MEMORY_KEY, JSON.stringify(items)).catch(console.error);
+  }, []);
+
+  const saveMemory = useCallback(
+    (params: { category: MemoryCategory; key: string; value: string }) => {
+      setMemories((prev) => {
+        const normalKey = params.key.trim().toLowerCase();
+        const existingIdx = prev.findIndex(
+          (m) => m.key.trim().toLowerCase() === normalKey
+        );
+        let next: MemoryItem[];
+
+        if (existingIdx >= 0) {
+          // Update existing
+          next = prev.map((m, i) =>
+            i === existingIdx
+              ? { ...m, value: params.value, category: params.category, updatedAt: Date.now() }
+              : m
+          );
+        } else {
+          // Add new
+          const newItem: MemoryItem = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            category: params.category,
+            key: params.key.trim(),
+            value: params.value.trim(),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          next = [...prev, newItem];
+        }
+
+        persistMemories(next);
+        return next;
+      });
+    },
+    [persistMemories]
+  );
+
+  const deleteMemoryById = useCallback(
+    (id: string) => {
+      setMemories((prev) => {
+        const next = prev.filter((m) => m.id !== id);
+        persistMemories(next);
+        return next;
+      });
+    },
+    [persistMemories]
+  );
+
+  const deleteMemoryByKey = useCallback(
+    (key: string) => {
+      const normalKey = key.trim().toLowerCase();
+      setMemories((prev) => {
+        const next = prev.filter(
+          (m) => m.key.trim().toLowerCase() !== normalKey
+        );
+        persistMemories(next);
+        return next;
+      });
+    },
+    [persistMemories]
+  );
+
+  const clearMemories = useCallback(() => {
+    setMemories([]);
+    AsyncStorage.removeItem(MEMORY_KEY).catch(console.error);
   }, []);
 
   return (
@@ -155,6 +240,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         conversationHistory,
         addToHistory,
         clearHistory,
+        memories,
+        saveMemory,
+        deleteMemoryById,
+        deleteMemoryByKey,
+        clearMemories,
         isLoaded,
       }}
     >

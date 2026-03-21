@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -12,16 +12,21 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NoteCard } from "@/components/NoteCard";
 import { ReminderItem } from "@/components/ReminderItem";
+import { MemoryCategorySection } from "@/components/MemoryCard";
 import Colors from "@/constants/colors";
+import { useApp, type MemoryCategory } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
 
-type Tab = "notes" | "reminders";
+type Tab = "notes" | "reminders" | "memory";
+
+const CATEGORY_ORDER: MemoryCategory[] = ["personal", "preferences", "schedule", "goals"];
 
 export default function NotesScreen() {
   const insets = useSafeAreaInsets();
   const { notes, deleteNote } = useNotes();
   const { reminders, deleteReminder, markCompleted } = useReminders();
+  const { memories, deleteMemoryById } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>("notes");
 
   const handleTabChange = (t: Tab) => {
@@ -29,18 +34,48 @@ export default function NotesScreen() {
     setActiveTab(t);
   };
 
+  // Group memories by category in a fixed display order
+  const memoriesByCategory = useMemo(() => {
+    return CATEGORY_ORDER.reduce<Record<MemoryCategory, typeof memories>>(
+      (acc, cat) => {
+        acc[cat] = memories.filter((m) => m.category === cat);
+        return acc;
+      },
+      { personal: [], preferences: [], schedule: [], goals: [] }
+    );
+  }, [memories]);
+
+  const TABS: { key: Tab; icon: string; label: string; count?: number }[] = [
+    {
+      key: "notes",
+      icon: "file-text",
+      label: "Notes",
+      count: notes.length > 0 ? notes.length : undefined,
+    },
+    {
+      key: "reminders",
+      icon: "bell",
+      label: "Reminders",
+      count:
+        reminders.filter((r) => !r.completed).length > 0
+          ? reminders.filter((r) => !r.completed).length
+          : undefined,
+    },
+    {
+      key: "memory",
+      icon: "cpu",
+      label: "Memory",
+      count: memories.length > 0 ? memories.length : undefined,
+    },
+  ];
+
   return (
     <View style={styles.root}>
       {/* Header */}
-      <View
-        style={[styles.header, { paddingTop: insets.top + 12 }]}
-      >
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Pressable
           onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backButton,
-            { opacity: pressed ? 0.6 : 1 },
-          ]}
+          style={({ pressed }) => [styles.backButton, { opacity: pressed ? 0.6 : 1 }]}
           hitSlop={12}
         >
           <Feather name="arrow-left" size={20} color={Colors.gold} />
@@ -50,74 +85,88 @@ export default function NotesScreen() {
       </View>
 
       {/* Tab switcher */}
-      <View style={styles.tabRow}>
-        {(["notes", "reminders"] as Tab[]).map((tab) => (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabRow}
+      >
+        {TABS.map(({ key, icon, label, count }) => (
           <Pressable
-            key={tab}
-            onPress={() => handleTabChange(tab)}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
+            key={key}
+            onPress={() => handleTabChange(key)}
+            style={[styles.tab, activeTab === key && styles.tabActive]}
           >
             <Feather
-              name={tab === "notes" ? "file-text" : "bell"}
-              size={14}
-              color={activeTab === tab ? Colors.gold : Colors.mutedWhite}
+              name={icon as any}
+              size={13}
+              color={activeTab === key ? Colors.gold : Colors.mutedWhite}
             />
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab && styles.tabTextActive,
-              ]}
-            >
-              {tab === "notes" ? "Notes" : "Reminders"}
-              {tab === "notes" && notes.length > 0
-                ? ` (${notes.length})`
-                : ""}
-              {tab === "reminders" && reminders.filter((r) => !r.completed).length > 0
-                ? ` (${reminders.filter((r) => !r.completed).length})`
-                : ""}
+            <Text style={[styles.tabText, activeTab === key && styles.tabTextActive]}>
+              {label}
+              {count != null ? ` (${count})` : ""}
             </Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
+      {/* Content */}
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + 32 },
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        {activeTab === "notes" ? (
+        {/* ── Notes ── */}
+        {activeTab === "notes" && (
           notes.length === 0 ? (
             <EmptyState
               icon="mic"
               title="No notes yet"
-              subtitle={'Say "take a note" and Mo will capture it instantly.'}
+              subtitle={'Say "take a note" or "write this down" and Mo will capture it instantly.'}
             />
           ) : (
             notes.map((note) => (
               <NoteCard key={note.id} note={note} onDelete={deleteNote} />
             ))
           )
-        ) : (
-          <>
-            {reminders.length === 0 ? (
-              <EmptyState
-                icon="bell"
-                title="No reminders yet"
-                subtitle={'Say "remind me to..." and Mo will schedule it for you.'}
+        )}
+
+        {/* ── Reminders ── */}
+        {activeTab === "reminders" && (
+          reminders.length === 0 ? (
+            <EmptyState
+              icon="bell"
+              title="No reminders yet"
+              subtitle={'Say "remind me to..." and Mo will schedule it for you.'}
+            />
+          ) : (
+            reminders.map((reminder) => (
+              <ReminderItem
+                key={reminder.id}
+                reminder={reminder}
+                onDelete={deleteReminder}
+                onComplete={markCompleted}
               />
-            ) : (
-              reminders.map((reminder) => (
-                <ReminderItem
-                  key={reminder.id}
-                  reminder={reminder}
-                  onDelete={deleteReminder}
-                  onComplete={markCompleted}
+            ))
+          )
+        )}
+
+        {/* ── Memory ── */}
+        {activeTab === "memory" && (
+          memories.length === 0 ? (
+            <MemoryEmptyState />
+          ) : (
+            CATEGORY_ORDER.map((cat) => {
+              const items = memoriesByCategory[cat];
+              if (!items.length) return null;
+              return (
+                <MemoryCategorySection
+                  key={cat}
+                  category={cat}
+                  items={items}
+                  onDelete={deleteMemoryById}
                 />
-              ))
-            )}
-          </>
+              );
+            })
+          )
         )}
       </ScrollView>
     </View>
@@ -144,10 +193,38 @@ function EmptyState({
   );
 }
 
+function MemoryEmptyState() {
+  return (
+    <View style={empty.container}>
+      <View style={empty.iconBox}>
+        <Feather name="cpu" size={24} color={Colors.gold} />
+      </View>
+      <Text style={empty.title}>Nothing remembered yet</Text>
+      <Text style={empty.subtitle}>
+        Tell Mo things to keep in mind and it will remember them across conversations.
+      </Text>
+      <View style={empty.examples}>
+        {[
+          '"Remember that I wake up at 7 AM"',
+          '"Remember that I prefer short responses"',
+          '"Remember my goal is to launch by Q1"',
+          '"What do you remember about me?"',
+          '"Forget that I wake up at 7 AM"',
+        ].map((ex) => (
+          <View key={ex} style={empty.exampleRow}>
+            <Feather name="mic" size={10} color={Colors.gold} style={{ opacity: 0.6 }} />
+            <Text style={empty.exampleText}>{ex}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const empty = StyleSheet.create({
   container: {
     alignItems: "center",
-    paddingTop: 60,
+    paddingTop: 48,
     gap: 12,
     paddingHorizontal: 32,
   },
@@ -175,6 +252,24 @@ const empty = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     fontStyle: "italic",
+  },
+  examples: {
+    marginTop: 16,
+    gap: 8,
+    width: "100%",
+  },
+  exampleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  exampleText: {
+    fontFamily: "DMSans_300Light",
+    fontSize: 12,
+    color: "rgba(201,168,76,0.55)",
+    fontStyle: "italic",
+    lineHeight: 18,
+    flex: 1,
   },
 });
 
@@ -205,11 +300,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   tabRow: {
-    flexDirection: "row",
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 8,
-    gap: 12,
+    gap: 10,
+    flexDirection: "row",
   },
   tab: {
     flexDirection: "row",
