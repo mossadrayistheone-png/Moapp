@@ -1,7 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
+import Svg, { Path, Line } from "react-native-svg";
 import Colors from "@/constants/colors";
 import type { AssistantState } from "@/hooks/use-voice";
 
@@ -162,15 +162,52 @@ export function MicButton({ state, onPress }: MicButtonProps) {
           {isThinking ? (
             <ThinkingDots />
           ) : (
-            <Ionicons
-              name="mic"
-              size={28}
+            <MicIcon
               color={isListening ? Colors.gold : isSpeaking ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.7)"}
+              size={28}
             />
           )}
         </Pressable>
       </Animated.View>
     </View>
+  );
+}
+
+// Pure SVG mic — no icon fonts, no font loading, works on all platforms
+function MicIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Microphone capsule body */}
+      <Path
+        d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Stand arc */}
+      <Path
+        d="M19 10v2a7 7 0 0 1-14 0v-2"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Stem */}
+      <Line
+        x1="12" y1="19" x2="12" y2="23"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+      />
+      {/* Base */}
+      <Line
+        x1="8" y1="23" x2="16" y2="23"
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+      />
+    </Svg>
   );
 }
 

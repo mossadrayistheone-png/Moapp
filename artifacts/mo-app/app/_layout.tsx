@@ -49,12 +49,10 @@ export default function RootLayout() {
     DMSans_300Light,
     DMSans_400Regular,
     DMSans_500Medium,
-    // Load vector icon fonts directly by file path — avoids relying on the
-    // static .font property which has issues with the 'use client' directive
-    // in React 19 / Expo SDK 54.  The font family keys must match exactly
-    // what createIconSet uses internally ('feather', 'ionicons').
+    // Load Feather icon font explicitly by file path so all <Feather> icons
+    // render immediately.  Direct require avoids the broken .font static
+    // property (affected by 'use client' in React 19 / Expo SDK 54).
     feather: require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf"),
-    ionicons: require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf"),
   });
 
   useEffect(() => {
