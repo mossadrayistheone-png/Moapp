@@ -8,8 +8,8 @@ import {
   DMSans_400Regular,
   DMSans_500Medium,
 } from "@expo-google-fonts/dm-sans";
+import { Feather } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
-import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -21,6 +21,7 @@ import { setBaseUrl } from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
+import { SafeNotifications } from "@/utils/notifications";
 
 setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 
@@ -28,36 +29,18 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-// Expo Go SDK 53+ removed remote push from Android. The expo-notifications
-// package emits a console.error when imported, which triggers the red overlay.
-// Local scheduled notifications still work. Filter the known false-positive.
-const _origConsoleError = console.error.bind(console);
-console.error = (...args: unknown[]) => {
-  const msg = typeof args[0] === "string" ? args[0] : "";
-  if (
-    msg.includes("expo-notifications") &&
-    msg.includes("removed from Expo Go")
-  ) {
-    return; // suppress — expected Expo Go SDK 53+ behaviour
-  }
-  _origConsoleError(...args);
-};
-
-// Configure foreground notification behaviour.
-// Wrapped in try/catch because Expo Go SDK 53+ throws for remote-push.
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-} catch {
-  // Remote push not available in Expo Go SDK 53+ — safe to ignore
-}
+// Register the foreground notification handler via the safe wrapper.
+// In Expo Go this is a silent no-op; in a dev/prod build it uses the
+// real expo-notifications module.
+SafeNotifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -67,6 +50,9 @@ export default function RootLayout() {
     DMSans_300Light,
     DMSans_400Regular,
     DMSans_500Medium,
+    // Explicitly pre-load the Feather icon font so icons render
+    // immediately on first paint instead of showing placeholder boxes.
+    ...Feather.font,
   });
 
   useEffect(() => {
