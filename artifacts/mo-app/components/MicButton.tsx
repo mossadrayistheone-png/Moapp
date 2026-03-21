@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
@@ -162,7 +162,7 @@ export function MicButton({ state, onPress }: MicButtonProps) {
           {isThinking ? (
             <ThinkingDots />
           ) : (
-            <Feather
+            <Ionicons
               name="mic"
               size={28}
               color={isListening ? Colors.gold : isSpeaking ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.7)"}

@@ -8,7 +8,6 @@ import {
   DMSans_400Regular,
   DMSans_500Medium,
 } from "@expo-google-fonts/dm-sans";
-import { Feather } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -50,9 +49,12 @@ export default function RootLayout() {
     DMSans_300Light,
     DMSans_400Regular,
     DMSans_500Medium,
-    // Explicitly pre-load the Feather icon font so icons render
-    // immediately on first paint instead of showing placeholder boxes.
-    ...Feather.font,
+    // Load vector icon fonts directly by file path — avoids relying on the
+    // static .font property which has issues with the 'use client' directive
+    // in React 19 / Expo SDK 54.  The font family keys must match exactly
+    // what createIconSet uses internally ('feather', 'ionicons').
+    feather: require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf"),
+    ionicons: require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf"),
   });
 
   useEffect(() => {
