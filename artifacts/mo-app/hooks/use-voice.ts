@@ -1,9 +1,28 @@
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback, useRef, useState } from "react";
+import { Platform } from "react-native";
 import type { MemoryItem, Task } from "@/context/AppContext";
 import type { Note } from "@/hooks/use-notes";
 import type { Reminder } from "@/hooks/use-reminders";
+
+// ── Web-compatible base64 reader ─────────────────────────────────────────────
+
+async function readBlobAsBase64(uri: string): Promise<string> {
+  const response = await fetch(uri);
+  const blob = await response.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      // Strip the data URL prefix — keep only the base64 payload
+      const base64 = result.split(",")[1] ?? "";
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 export type AssistantState =
   | "idle"
@@ -155,10 +174,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
+      if (Platform.OS !== "web") {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+      }
 
       const recording = new Audio.Recording();
       await recording.prepareToRecordAsync(RECORDING_OPTIONS);
@@ -184,10 +205,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
       const uri = recording.getURI();
       recordingRef.current = null;
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      });
+      if (Platform.OS !== "web") {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+        });
+      }
 
       if (!uri) {
         setStateSync("idle");
@@ -196,9 +219,16 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       setStateSync("thinking");
 
-      const audioBase64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      // On web the URI is a blob: URL — use fetch + FileReader instead of expo-file-system
+      const audioBase64 =
+        Platform.OS === "web"
+          ? await readBlobAsBase64(uri)
+          : await FileSystem.readAsStringAsync(uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+
+      // Web records in WebM; native records in m4a — Whisper accepts both
+      const audioFormat = Platform.OS === "web" ? "webm" : "m4a";
 
       // Last 10 conversation turns for continuity
       const recentHistory = conversationHistory.slice(-10).map((m) => ({
@@ -255,7 +285,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           audio: audioBase64,
-          format: "m4a",
+          format: audioFormat,
           mode,
           messages: recentHistory,
           memories: memoriesForApi,
@@ -334,11 +364,6 @@ export function useVoice(options: UseVoiceOptions = {}) {
         return;
       }
 
-      const audioPath = `${FileSystem.cacheDirectory}mo-reply.mp3`;
-      await FileSystem.writeAsStringAsync(audioPath, audiob64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
       // Natural pre-speech pause
       await new Promise<void>((resolve) => setTimeout(resolve, 600));
 
@@ -347,8 +372,21 @@ export function useVoice(options: UseVoiceOptions = {}) {
         soundRef.current = null;
       }
 
+      // On web: play directly from a data URI — no file system write needed
+      // On native: write to cache first (expo-av requires a file URI on native)
+      let audioUri: string;
+      if (Platform.OS === "web") {
+        audioUri = `data:audio/mpeg;base64,${audiob64}`;
+      } else {
+        const audioPath = `${FileSystem.cacheDirectory}mo-reply.mp3`;
+        await FileSystem.writeAsStringAsync(audioPath, audiob64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        audioUri = audioPath;
+      }
+
       const { sound } = await Audio.Sound.createAsync(
-        { uri: audioPath },
+        { uri: audioUri },
         { shouldPlay: false }
       );
       soundRef.current = sound;
