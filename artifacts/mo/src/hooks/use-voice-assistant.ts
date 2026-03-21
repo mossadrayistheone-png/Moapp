@@ -135,6 +135,22 @@ export function useVoiceAssistant() {
     if (audioRef.current) {
       audioRef.current.pause();
     }
+
+    // Unlock audio on iOS — must happen synchronously inside user gesture
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContext) {
+        const ctx = new AudioContext();
+        const buf = ctx.createBuffer(1, 1, 22050);
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        src.start(0);
+        ctx.resume().then(() => ctx.close());
+      }
+    } catch (_) {
+      // Non-critical — ignore if AudioContext unavailable
+    }
     
     transcriptRef.current = '';
     setTranscript('');

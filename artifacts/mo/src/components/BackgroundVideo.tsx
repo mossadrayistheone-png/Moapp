@@ -14,6 +14,12 @@ export function BackgroundVideo() {
     };
 
     video.addEventListener("loadedmetadata", handleMetadata);
+
+    // Attempt autoplay — on iOS this is allowed only when muted + playsInline
+    video.play().catch(() => {
+      // Silently fail; video will play on next user interaction on restrictive browsers
+    });
+
     return () => video.removeEventListener("loadedmetadata", handleMetadata);
   }, []);
 
@@ -26,11 +32,11 @@ export function BackgroundVideo() {
         loop
         muted
         playsInline
-        preload="auto"
+        preload="metadata"
+        disablePictureInPicture
         className="absolute inset-0 w-full h-full object-cover"
-        style={{ willChange: "transform" }}
+        style={{ willChange: "auto" }}
       />
-      {/* Minimal scrim — just enough to take the edge off bright areas */}
       <div className="absolute inset-0 bg-black/25" />
     </div>
   );
