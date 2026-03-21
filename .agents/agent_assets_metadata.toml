@@ -6,3 +6,9 @@ id = "3FSQ5-T04W3gs3VSXZD8x"
 uri = "file://expo-qr.png"
 type = "image"
 title = "Mo — Expo Go QR Code"
+
+[[outputs]]
+id = "GFEcBB69gM9srMsDSJ0rv"
+uri = "file://mo-project.zip"
+type = "unspecified"
+title = "Mo — Full Project Source (ZIP)"
