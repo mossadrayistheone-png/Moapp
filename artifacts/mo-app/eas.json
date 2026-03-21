@@ -12,7 +12,7 @@
         "gradleCommand": ":app:assembleDebug"
       },
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "4f6fb0d5-3605-432b-b4cf-752ffaa27876-00-23fkcbo0ta0v8.expo.spock.replit.dev"
+        "EXPO_PUBLIC_DOMAIN": "4f6fb0d5-3605-432b-b4cf-752ffaa27876-00-23fkcbo0ta0v8.spock.replit.dev"
       }
     },
     "preview": {
@@ -22,7 +22,7 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "4f6fb0d5-3605-432b-b4cf-752ffaa27876-00-23fkcbo0ta0v8.expo.spock.replit.dev"
+        "EXPO_PUBLIC_DOMAIN": "4f6fb0d5-3605-432b-b4cf-752ffaa27876-00-23fkcbo0ta0v8.spock.replit.dev"
       }
     },
     "production": {
