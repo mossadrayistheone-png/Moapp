@@ -7,14 +7,14 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Platform } from "react-native";
 import type { AssistantMode } from "@/hooks/use-voice";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type ResponseLength = "short" | "medium" | "long";
-
 export type MemoryCategory = "personal" | "preferences" | "schedule" | "goals";
+export type TaskStatus = "pending" | "completed";
+export type TaskCategory = "work" | "personal" | "health" | "finance" | "other";
 
 export interface MemoryItem {
   id: string;
@@ -23,6 +23,17 @@ export interface MemoryItem {
   value: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  dueDate?: string;
+  status: TaskStatus;
+  category?: TaskCategory;
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
 }
 
 export interface UserPreferences {
@@ -42,16 +53,28 @@ export interface ConversationMessage {
 }
 
 interface AppContextValue {
+  // Preferences
   preferences: UserPreferences;
   updatePreferences: (updates: Partial<UserPreferences>) => void;
+  // Conversation
   conversationHistory: ConversationMessage[];
   addToHistory: (transcript: string, reply: string) => void;
   clearHistory: () => void;
+  // Memory
   memories: MemoryItem[];
   saveMemory: (params: { category: MemoryCategory; key: string; value: string }) => void;
   deleteMemoryById: (id: string) => void;
   deleteMemoryByKey: (key: string) => void;
   clearMemories: () => void;
+  // Tasks
+  tasks: Task[];
+  addTask: (params: { title: string; dueDate?: string; category?: string }) => void;
+  completeTaskById: (id: string) => void;
+  completeTaskByTitle: (title: string) => void;
+  deleteTaskById: (id: string) => void;
+  deleteTaskByTitle: (title: string) => void;
+  clearTasks: () => void;
+  // Loading
   isLoaded: boolean;
 }
 
@@ -78,6 +101,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 const PREFS_KEY = "@mo:preferences";
 const HISTORY_KEY = "@mo:conversationHistory";
 const MEMORY_KEY = "@mo:memories";
+const TASKS_KEY = "@mo:tasks";
 const MAX_HISTORY = 20;
 
 // ── Context ──────────────────────────────────────────────────────────────────
@@ -85,35 +109,27 @@ const MAX_HISTORY = 20;
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [preferences, setPreferences] =
-    useState<UserPreferences>(DEFAULT_PREFERENCES);
-  const [conversationHistory, setConversationHistory] = useState<
-    ConversationMessage[]
-  >([]);
+  const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load all persistent state from storage on mount
+  // Load all persistent state on mount
   useEffect(() => {
     const load = async () => {
       try {
-        const [prefsRaw, historyRaw, memoriesRaw] = await Promise.all([
+        const [prefsRaw, historyRaw, memoriesRaw, tasksRaw] = await Promise.all([
           AsyncStorage.getItem(PREFS_KEY),
           AsyncStorage.getItem(HISTORY_KEY),
           AsyncStorage.getItem(MEMORY_KEY),
+          AsyncStorage.getItem(TASKS_KEY),
         ]);
-
-        if (prefsRaw) {
-          const saved = JSON.parse(prefsRaw) as Partial<UserPreferences>;
-          setPreferences((prev) => ({ ...prev, ...saved }));
-        }
-        if (historyRaw) {
-          setConversationHistory(JSON.parse(historyRaw));
-        }
-        if (memoriesRaw) {
-          setMemories(JSON.parse(memoriesRaw));
-        }
+        if (prefsRaw) setPreferences((p) => ({ ...p, ...JSON.parse(prefsRaw) }));
+        if (historyRaw) setConversationHistory(JSON.parse(historyRaw));
+        if (memoriesRaw) setMemories(JSON.parse(memoriesRaw));
+        if (tasksRaw) setTasks(JSON.parse(tasksRaw));
       } catch (err) {
         console.error("Failed to load app state:", err);
       } finally {
@@ -125,21 +141,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Preferences ──────────────────────────────────────────────────────────
 
-  const updatePreferences = useCallback(
-    (updates: Partial<UserPreferences>) => {
-      setPreferences((prev) => {
-        const next = { ...prev, ...updates };
-        if (saveTimeout.current) clearTimeout(saveTimeout.current);
-        saveTimeout.current = setTimeout(() => {
-          AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)).catch(
-            console.error
-          );
-        }, 300);
-        return next;
-      });
-    },
-    []
-  );
+  const updatePreferences = useCallback((updates: Partial<UserPreferences>) => {
+    setPreferences((prev) => {
+      const next = { ...prev, ...updates };
+      if (saveTimeout.current) clearTimeout(saveTimeout.current);
+      saveTimeout.current = setTimeout(() => {
+        AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)).catch(console.error);
+      }, 300);
+      return next;
+    });
+  }, []);
 
   // ── Conversation history ──────────────────────────────────────────────────
 
@@ -170,31 +181,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (params: { category: MemoryCategory; key: string; value: string }) => {
       setMemories((prev) => {
         const normalKey = params.key.trim().toLowerCase();
-        const existingIdx = prev.findIndex(
-          (m) => m.key.trim().toLowerCase() === normalKey
-        );
+        const idx = prev.findIndex((m) => m.key.trim().toLowerCase() === normalKey);
         let next: MemoryItem[];
-
-        if (existingIdx >= 0) {
-          // Update existing
+        if (idx >= 0) {
           next = prev.map((m, i) =>
-            i === existingIdx
+            i === idx
               ? { ...m, value: params.value, category: params.category, updatedAt: Date.now() }
               : m
           );
         } else {
-          // Add new
-          const newItem: MemoryItem = {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            category: params.category,
-            key: params.key.trim(),
-            value: params.value.trim(),
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-          next = [...prev, newItem];
+          next = [
+            ...prev,
+            {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              category: params.category,
+              key: params.key.trim(),
+              value: params.value.trim(),
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          ];
         }
-
         persistMemories(next);
         return next;
       });
@@ -217,9 +224,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (key: string) => {
       const normalKey = key.trim().toLowerCase();
       setMemories((prev) => {
-        const next = prev.filter(
-          (m) => m.key.trim().toLowerCase() !== normalKey
-        );
+        const next = prev.filter((m) => m.key.trim().toLowerCase() !== normalKey);
         persistMemories(next);
         return next;
       });
@@ -230,6 +235,91 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const clearMemories = useCallback(() => {
     setMemories([]);
     AsyncStorage.removeItem(MEMORY_KEY).catch(console.error);
+  }, []);
+
+  // ── Tasks ─────────────────────────────────────────────────────────────────
+
+  const persistTasks = useCallback((items: Task[]) => {
+    AsyncStorage.setItem(TASKS_KEY, JSON.stringify(items)).catch(console.error);
+  }, []);
+
+  const addTask = useCallback(
+    (params: { title: string; dueDate?: string; category?: string }) => {
+      setTasks((prev) => {
+        const newTask: Task = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          title: params.title.trim(),
+          dueDate: params.dueDate,
+          category: (params.category as TaskCategory) ?? undefined,
+          status: "pending",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        const next = [newTask, ...prev];
+        persistTasks(next);
+        return next;
+      });
+    },
+    [persistTasks]
+  );
+
+  const completeTaskById = useCallback(
+    (id: string) => {
+      setTasks((prev) => {
+        const next = prev.map((t) =>
+          t.id === id && t.status === "pending"
+            ? { ...t, status: "completed" as const, completedAt: Date.now(), updatedAt: Date.now() }
+            : t
+        );
+        persistTasks(next);
+        return next;
+      });
+    },
+    [persistTasks]
+  );
+
+  const completeTaskByTitle = useCallback(
+    (title: string) => {
+      const needle = title.trim().toLowerCase();
+      setTasks((prev) => {
+        const next = prev.map((t) =>
+          t.title.toLowerCase().includes(needle) && t.status === "pending"
+            ? { ...t, status: "completed" as const, completedAt: Date.now(), updatedAt: Date.now() }
+            : t
+        );
+        persistTasks(next);
+        return next;
+      });
+    },
+    [persistTasks]
+  );
+
+  const deleteTaskById = useCallback(
+    (id: string) => {
+      setTasks((prev) => {
+        const next = prev.filter((t) => t.id !== id);
+        persistTasks(next);
+        return next;
+      });
+    },
+    [persistTasks]
+  );
+
+  const deleteTaskByTitle = useCallback(
+    (title: string) => {
+      const needle = title.trim().toLowerCase();
+      setTasks((prev) => {
+        const next = prev.filter((t) => !t.title.toLowerCase().includes(needle));
+        persistTasks(next);
+        return next;
+      });
+    },
+    [persistTasks]
+  );
+
+  const clearTasks = useCallback(() => {
+    setTasks([]);
+    AsyncStorage.removeItem(TASKS_KEY).catch(console.error);
   }, []);
 
   return (
@@ -245,6 +335,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         deleteMemoryById,
         deleteMemoryByKey,
         clearMemories,
+        tasks,
+        addTask,
+        completeTaskById,
+        completeTaskByTitle,
+        deleteTaskById,
+        deleteTaskByTitle,
+        clearTasks,
         isLoaded,
       }}
     >

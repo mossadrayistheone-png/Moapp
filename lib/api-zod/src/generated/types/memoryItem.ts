@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 import type { MemoryItemCategory } from "./memoryItemCategory";
 
@@ -13,9 +13,7 @@ import type { MemoryItemCategory } from "./memoryItemCategory";
 export interface MemoryItem {
   id: string;
   category: MemoryItemCategory;
-  /** Short identifier for the fact, e.g. "wake up time" */
   key: string;
-  /** The value, e.g. "7 AM" */
   value: string;
   createdAt: number;
   updatedAt: number;

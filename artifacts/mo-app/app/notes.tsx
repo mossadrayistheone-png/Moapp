@@ -13,30 +13,36 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NoteCard } from "@/components/NoteCard";
 import { ReminderItem } from "@/components/ReminderItem";
 import { MemoryCategorySection } from "@/components/MemoryCard";
+import { TaskCard } from "@/components/TaskCard";
 import Colors from "@/constants/colors";
 import { useApp, type MemoryCategory } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
 
-type Tab = "notes" | "reminders" | "memory";
+type Tab = "tasks" | "notes" | "reminders" | "memory";
 
-const CATEGORY_ORDER: MemoryCategory[] = ["personal", "preferences", "schedule", "goals"];
+const MEMORY_CATEGORY_ORDER: MemoryCategory[] = ["personal", "preferences", "schedule", "goals"];
 
 export default function NotesScreen() {
   const insets = useSafeAreaInsets();
   const { notes, deleteNote } = useNotes();
   const { reminders, deleteReminder, markCompleted } = useReminders();
-  const { memories, deleteMemoryById } = useApp();
-  const [activeTab, setActiveTab] = useState<Tab>("notes");
+  const {
+    memories,
+    deleteMemoryById,
+    tasks,
+    completeTaskById,
+    deleteTaskById,
+  } = useApp();
+  const [activeTab, setActiveTab] = useState<Tab>("tasks");
 
   const handleTabChange = (t: Tab) => {
     Haptics.selectionAsync();
     setActiveTab(t);
   };
 
-  // Group memories by category in a fixed display order
   const memoriesByCategory = useMemo(() => {
-    return CATEGORY_ORDER.reduce<Record<MemoryCategory, typeof memories>>(
+    return MEMORY_CATEGORY_ORDER.reduce<Record<MemoryCategory, typeof memories>>(
       (acc, cat) => {
         acc[cat] = memories.filter((m) => m.category === cat);
         return acc;
@@ -45,7 +51,17 @@ export default function NotesScreen() {
     );
   }, [memories]);
 
+  const pendingCount = tasks.filter((t) => t.status === "pending").length;
+  const completedCount = tasks.filter((t) => t.status === "completed").length;
+  const activeRemindersCount = reminders.filter((r) => !r.completed).length;
+
   const TABS: { key: Tab; icon: string; label: string; count?: number }[] = [
+    {
+      key: "tasks",
+      icon: "check-square",
+      label: "Tasks",
+      count: pendingCount > 0 ? pendingCount : undefined,
+    },
     {
       key: "notes",
       icon: "file-text",
@@ -56,10 +72,7 @@ export default function NotesScreen() {
       key: "reminders",
       icon: "bell",
       label: "Reminders",
-      count:
-        reminders.filter((r) => !r.completed).length > 0
-          ? reminders.filter((r) => !r.completed).length
-          : undefined,
+      count: activeRemindersCount > 0 ? activeRemindersCount : undefined,
     },
     {
       key: "memory",
@@ -114,6 +127,54 @@ export default function NotesScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── Tasks ── */}
+        {activeTab === "tasks" && (
+          <>
+            {tasks.length === 0 ? (
+              <TaskEmptyState />
+            ) : (
+              <>
+                {/* Pending */}
+                {pendingCount > 0 && (
+                  <View style={section.group}>
+                    <Text style={section.label}>
+                      Pending · {pendingCount}
+                    </Text>
+                    {tasks
+                      .filter((t) => t.status === "pending")
+                      .map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onComplete={completeTaskById}
+                          onDelete={deleteTaskById}
+                        />
+                      ))}
+                  </View>
+                )}
+                {/* Completed */}
+                {completedCount > 0 && (
+                  <View style={section.group}>
+                    <Text style={section.label}>
+                      Completed · {completedCount}
+                    </Text>
+                    {tasks
+                      .filter((t) => t.status === "completed")
+                      .map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onComplete={completeTaskById}
+                          onDelete={deleteTaskById}
+                        />
+                      ))}
+                  </View>
+                )}
+              </>
+            )}
+          </>
+        )}
+
         {/* ── Notes ── */}
         {activeTab === "notes" && (
           notes.length === 0 ? (
@@ -154,7 +215,7 @@ export default function NotesScreen() {
           memories.length === 0 ? (
             <MemoryEmptyState />
           ) : (
-            CATEGORY_ORDER.map((cat) => {
+            MEMORY_CATEGORY_ORDER.map((cat) => {
               const items = memoriesByCategory[cat];
               if (!items.length) return null;
               return (
@@ -173,15 +234,9 @@ export default function NotesScreen() {
   );
 }
 
-function EmptyState({
-  icon,
-  title,
-  subtitle,
-}: {
-  icon: string;
-  title: string;
-  subtitle: string;
-}) {
+// ── Empty states ──────────────────────────────────────────────────────────────
+
+function EmptyState({ icon, title, subtitle }: { icon: string; title: string; subtitle: string }) {
   return (
     <View style={empty.container}>
       <View style={empty.iconBox}>
@@ -189,6 +244,34 @@ function EmptyState({
       </View>
       <Text style={empty.title}>{title}</Text>
       <Text style={empty.subtitle}>{subtitle}</Text>
+    </View>
+  );
+}
+
+function TaskEmptyState() {
+  return (
+    <View style={empty.container}>
+      <View style={empty.iconBox}>
+        <Feather name="check-square" size={24} color={Colors.gold} />
+      </View>
+      <Text style={empty.title}>No tasks yet</Text>
+      <Text style={empty.subtitle}>
+        Tell Mo what you need to do and it will track it for you.
+      </Text>
+      <View style={empty.examples}>
+        {[
+          '"Add a task to call John tomorrow"',
+          '"I need to finish the report by Friday"',
+          '"Show my tasks"',
+          '"Mark my workout task complete"',
+          '"Delete my grocery task"',
+        ].map((ex) => (
+          <View key={ex} style={empty.exampleRow}>
+            <Feather name="mic" size={10} color={Colors.gold} style={{ opacity: 0.6 }} />
+            <Text style={empty.exampleText}>{ex}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -207,7 +290,6 @@ function MemoryEmptyState() {
         {[
           '"Remember that I wake up at 7 AM"',
           '"Remember that I prefer short responses"',
-          '"Remember my goal is to launch by Q1"',
           '"What do you remember about me?"',
           '"Forget that I wake up at 7 AM"',
         ].map((ex) => (
@@ -220,6 +302,22 @@ function MemoryEmptyState() {
     </View>
   );
 }
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const section = StyleSheet.create({
+  group: {
+    marginBottom: 24,
+  },
+  label: {
+    fontFamily: "DMSans_300Light",
+    fontSize: 10,
+    color: Colors.mutedWhite,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    marginBottom: 10,
+  },
+});
 
 const empty = StyleSheet.create({
   container: {
@@ -274,10 +372,7 @@ const empty = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#0a0a0a",
-  },
+  root: { flex: 1, backgroundColor: "#0a0a0a" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -325,11 +420,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.mutedWhite,
   },
-  tabTextActive: {
-    color: Colors.gold,
-  },
-  scroll: {
-    padding: 20,
-    paddingTop: 16,
-  },
+  tabTextActive: { color: Colors.gold },
+  scroll: { padding: 20, paddingTop: 16 },
 });

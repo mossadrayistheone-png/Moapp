@@ -3,11 +3,12 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 import type { ChatRequestMode } from "./chatRequestMode";
 import type { ConversationMessage } from "./conversationMessage";
 import type { MemoryItem } from "./memoryItem";
+import type { Task } from "./task";
 import type { UserPreferences } from "./userPreferences";
 
 export interface ChatRequest {
@@ -15,6 +16,7 @@ export interface ChatRequest {
   mode?: ChatRequestMode;
   messages?: ConversationMessage[];
   preferences?: UserPreferences;
-  /** Current remembered facts about the user */
   memories?: MemoryItem[];
+  /** Current pending tasks for context */
+  tasks?: Task[];
 }

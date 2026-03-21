@@ -19,7 +19,7 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
-import { useVoice, type AssistantMode, type MemoryActionPayload } from "@/hooks/use-voice";
+import { useVoice, type AssistantMode, type MemoryActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -100,6 +100,10 @@ export default function HomeScreen() {
     memories,
     saveMemory,
     deleteMemoryByKey,
+    tasks,
+    addTask,
+    completeTaskByTitle,
+    deleteTaskByTitle,
   } = useApp();
   const { addNote } = useNotes();
   const { addReminder, upcomingReminders } = useReminders();
@@ -128,6 +132,18 @@ export default function HomeScreen() {
       },
       [saveMemory, deleteMemoryByKey]
     ),
+    onTaskAction: useCallback(
+      (action: TaskActionPayload) => {
+        if (action.action === "add" && action.title) {
+          addTask({ title: action.title, dueDate: action.dueDate, category: action.category });
+        } else if (action.action === "complete" && action.title) {
+          completeTaskByTitle(action.title);
+        } else if (action.action === "delete" && action.title) {
+          deleteTaskByTitle(action.title);
+        }
+      },
+      [addTask, completeTaskByTitle, deleteTaskByTitle]
+    ),
     onTurnComplete: useCallback(
       (transcript: string, reply: string) => addToHistory(transcript, reply),
       [addToHistory]
@@ -138,6 +154,7 @@ export default function HomeScreen() {
     useVoice({
       conversationHistory,
       memories,
+      tasks,
       preferences: {
         name: preferences.name || undefined,
         location: preferences.location || undefined,
@@ -188,6 +205,7 @@ export default function HomeScreen() {
 
   const hasConversation = conversationHistory.length > 0;
   const memoryCount = memories.length;
+  const pendingTaskCount = tasks.filter((t) => t.status === "pending").length;
 
   return (
     <View style={styles.root}>
@@ -258,9 +276,12 @@ export default function HomeScreen() {
           <View style={styles.brand}>
             <Text style={styles.brandName}>Mo.</Text>
             <Text style={styles.brandTagline}>Private Intelligence</Text>
-            {memoryCount > 0 && (
+            {(pendingTaskCount > 0 || memoryCount > 0) && (
               <Text style={styles.memoryHint}>
-                {memoryCount} {memoryCount === 1 ? "memory" : "memories"}
+                {[
+                  pendingTaskCount > 0 ? `${pendingTaskCount} ${pendingTaskCount === 1 ? "task" : "tasks"}` : null,
+                  memoryCount > 0 ? `${memoryCount} ${memoryCount === 1 ? "memory" : "memories"}` : null,
+                ].filter(Boolean).join(" · ")}
               </Text>
             )}
           </View>

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 export interface HealthStatus {
   status: string;
@@ -54,9 +54,7 @@ export const MemoryItemCategory = {
 export interface MemoryItem {
   id: string;
   category: MemoryItemCategory;
-  /** Short identifier for the fact, e.g. "wake up time" */
   key: string;
-  /** The value, e.g. "7 AM" */
   value: string;
   createdAt: number;
   updatedAt: number;
@@ -80,14 +78,53 @@ export const MemoryActionCategory = {
   goals: "goals",
 } as const;
 
-/**
- * Memory operation triggered by this response
- */
 export interface MemoryAction {
   action: MemoryActionAction;
   category?: MemoryActionCategory;
   key: string;
   value?: string;
+}
+
+export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
+
+export const TaskStatus = {
+  pending: "pending",
+  completed: "completed",
+} as const;
+
+/**
+ * A user task
+ */
+export interface Task {
+  id: string;
+  title: string;
+  /** Optional ISO 8601 due date in UTC */
+  dueDate?: string;
+  status: TaskStatus;
+  /** Optional: work, personal, health, finance, other */
+  category?: string;
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
+}
+
+export type TaskActionAction =
+  (typeof TaskActionAction)[keyof typeof TaskActionAction];
+
+export const TaskActionAction = {
+  add: "add",
+  complete: "complete",
+  delete: "delete",
+} as const;
+
+/**
+ * Task operation triggered by this response
+ */
+export interface TaskAction {
+  action: TaskActionAction;
+  title: string;
+  dueDate?: string;
+  category?: string;
 }
 
 export interface ReminderData {
@@ -116,8 +153,9 @@ export interface ChatRequest {
   mode?: ChatRequestMode;
   messages?: ConversationMessage[];
   preferences?: UserPreferences;
-  /** Current remembered facts about the user */
   memories?: MemoryItem[];
+  /** Current pending tasks for context */
+  tasks?: Task[];
 }
 
 export interface ChatResponse {
@@ -126,6 +164,7 @@ export interface ChatResponse {
   reminder?: ReminderData;
   note?: NoteData;
   memoryAction?: MemoryAction;
+  taskAction?: TaskAction;
 }
 
 export interface SpeakRequest {
@@ -157,11 +196,11 @@ export interface VoiceRequest {
   audio: string;
   format?: VoiceRequestFormat;
   mode?: VoiceRequestMode;
-  /** Previous conversation turns for continuity */
   messages?: ConversationMessage[];
   preferences?: UserPreferences;
-  /** Current remembered facts about the user */
   memories?: MemoryItem[];
+  /** Current pending tasks for context */
+  tasks?: Task[];
 }
 
 export interface VoiceResponse {
@@ -172,6 +211,7 @@ export interface VoiceResponse {
   reminder?: ReminderData;
   note?: NoteData;
   memoryAction?: MemoryAction;
+  taskAction?: TaskAction;
 }
 
 export interface ErrorResponse {

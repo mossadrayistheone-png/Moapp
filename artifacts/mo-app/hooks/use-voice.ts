@@ -1,7 +1,7 @@
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
 import { useCallback, useRef, useState } from "react";
-import type { MemoryItem } from "@/context/AppContext";
+import type { MemoryItem, Task } from "@/context/AppContext";
 
 export type AssistantState =
   | "idle"
@@ -31,10 +31,18 @@ export interface MemoryActionPayload {
   value?: string;
 }
 
+export interface TaskActionPayload {
+  action: "add" | "complete" | "delete";
+  title: string;
+  dueDate?: string;
+  category?: string;
+}
+
 export interface VoiceCallbacks {
   onNote?: (content: string) => void;
   onReminder?: (params: { title: string; content: string; datetime: string }) => void;
   onMemoryAction?: (action: MemoryActionPayload) => void;
+  onTaskAction?: (action: TaskActionPayload) => void;
   onTurnComplete?: (transcript: string, reply: string) => void;
 }
 
@@ -66,6 +74,7 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
 interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
   memories?: MemoryItem[];
+  tasks?: Task[];
   preferences?: UserPreferences;
   autoplay?: boolean;
   callbacks?: VoiceCallbacks;
@@ -75,6 +84,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const {
     conversationHistory = [],
     memories = [],
+    tasks = [],
     preferences,
     autoplay = true,
     callbacks,
@@ -156,7 +166,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         content: m.content,
       }));
 
-      // Serialize memories for the API (omit internal ids/timestamps for brevity)
+      // Serialize memories for the API
       const memoriesForApi = memories.map((m) => ({
         id: m.id,
         category: m.category,
@@ -165,6 +175,19 @@ export function useVoice(options: UseVoiceOptions = {}) {
         createdAt: m.createdAt,
         updatedAt: m.updatedAt,
       }));
+
+      // Serialize pending tasks for the API (completed tasks are not useful as context)
+      const tasksForApi = tasks
+        .filter((t) => t.status === "pending")
+        .map((t) => ({
+          id: t.id,
+          title: t.title,
+          dueDate: t.dueDate,
+          status: t.status,
+          category: t.category,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        }));
 
       const response = await fetch(`${BASE_URL}/api/mo/voice`, {
         method: "POST",
@@ -175,6 +198,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
           mode,
           messages: recentHistory,
           memories: memoriesForApi,
+          tasks: tasksForApi,
           preferences: preferences
             ? {
                 name: preferences.name,
@@ -199,6 +223,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         reminder?: { title: string; content: string; datetime: string };
         note?: { content: string };
         memoryAction?: MemoryActionPayload;
+        taskAction?: TaskActionPayload;
       };
 
       const { transcript: tx, reply: rp, audioBase64: audiob64 } = data;
@@ -220,6 +245,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
       }
       if (data.memoryAction) {
         callbacks?.onMemoryAction?.(data.memoryAction);
+      }
+      if (data.taskAction) {
+        callbacks?.onTaskAction?.(data.taskAction);
       }
 
       // Notify parent of completed turn

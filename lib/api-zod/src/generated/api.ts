@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 import * as zod from "zod";
 
@@ -49,17 +49,37 @@ export const MoChatBody = zod.object({
         .object({
           id: zod.string(),
           category: zod.enum(["personal", "preferences", "schedule", "goals"]),
-          key: zod
-            .string()
-            .describe('Short identifier for the fact, e.g. \"wake up time\"'),
-          value: zod.string().describe('The value, e.g. \"7 AM\"'),
+          key: zod.string(),
+          value: zod.string(),
           createdAt: zod.number(),
           updatedAt: zod.number(),
         })
         .describe("A single remembered fact about the user"),
     )
+    .optional(),
+  tasks: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          title: zod.string(),
+          dueDate: zod
+            .string()
+            .optional()
+            .describe("Optional ISO 8601 due date in UTC"),
+          status: zod.enum(["pending", "completed"]),
+          category: zod
+            .string()
+            .optional()
+            .describe("Optional: work, personal, health, finance, other"),
+          createdAt: zod.number(),
+          updatedAt: zod.number(),
+          completedAt: zod.number().optional(),
+        })
+        .describe("A user task"),
+    )
     .optional()
-    .describe("Current remembered facts about the user"),
+    .describe("Current pending tasks for context"),
 });
 
 export const MoChatResponse = zod.object({
@@ -87,8 +107,16 @@ export const MoChatResponse = zod.object({
       key: zod.string(),
       value: zod.string().optional(),
     })
+    .optional(),
+  taskAction: zod
+    .object({
+      action: zod.enum(["add", "complete", "delete"]),
+      title: zod.string(),
+      dueDate: zod.string().optional(),
+      category: zod.string().optional(),
+    })
     .optional()
-    .describe("Memory operation triggered by this response"),
+    .describe("Task operation triggered by this response"),
 });
 
 /**
@@ -120,8 +148,7 @@ export const MoVoiceBody = zod.object({
         content: zod.string(),
       }),
     )
-    .optional()
-    .describe("Previous conversation turns for continuity"),
+    .optional(),
   preferences: zod
     .object({
       name: zod.string().optional(),
@@ -138,17 +165,37 @@ export const MoVoiceBody = zod.object({
         .object({
           id: zod.string(),
           category: zod.enum(["personal", "preferences", "schedule", "goals"]),
-          key: zod
-            .string()
-            .describe('Short identifier for the fact, e.g. \"wake up time\"'),
-          value: zod.string().describe('The value, e.g. \"7 AM\"'),
+          key: zod.string(),
+          value: zod.string(),
           createdAt: zod.number(),
           updatedAt: zod.number(),
         })
         .describe("A single remembered fact about the user"),
     )
+    .optional(),
+  tasks: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          title: zod.string(),
+          dueDate: zod
+            .string()
+            .optional()
+            .describe("Optional ISO 8601 due date in UTC"),
+          status: zod.enum(["pending", "completed"]),
+          category: zod
+            .string()
+            .optional()
+            .describe("Optional: work, personal, health, finance, other"),
+          createdAt: zod.number(),
+          updatedAt: zod.number(),
+          completedAt: zod.number().optional(),
+        })
+        .describe("A user task"),
+    )
     .optional()
-    .describe("Current remembered facts about the user"),
+    .describe("Current pending tasks for context"),
 });
 
 export const MoVoiceResponse = zod.object({
@@ -178,6 +225,14 @@ export const MoVoiceResponse = zod.object({
       key: zod.string(),
       value: zod.string().optional(),
     })
+    .optional(),
+  taskAction: zod
+    .object({
+      action: zod.enum(["add", "complete", "delete"]),
+      title: zod.string(),
+      dueDate: zod.string().optional(),
+      category: zod.string().optional(),
+    })
     .optional()
-    .describe("Memory operation triggered by this response"),
+    .describe("Task operation triggered by this response"),
 });

@@ -3,14 +3,11 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.3.0
+ * OpenAPI spec version: 0.4.0
  */
 import type { MemoryActionAction } from "./memoryActionAction";
 import type { MemoryActionCategory } from "./memoryActionCategory";
 
-/**
- * Memory operation triggered by this response
- */
 export interface MemoryAction {
   action: MemoryActionAction;
   category?: MemoryActionCategory;

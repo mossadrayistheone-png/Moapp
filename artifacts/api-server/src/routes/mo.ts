@@ -42,7 +42,7 @@ ${SHARED_RULES}
 Tone: structured yet human. Think in blocks of time, energy levels, and priorities. A great plan feels both rigorous and doable. Ask clarifying questions when needed. Speak like a chief of staff who keeps things moving without creating anxiety. Help the user think through their schedule, priorities, and goals for the day.`,
 };
 
-// ── Memory types ─────────────────────────────────────────────────────────────
+// ── Domain types ─────────────────────────────────────────────────────────────
 
 interface MemoryItem {
   id: string;
@@ -60,6 +60,24 @@ interface MemoryAction {
   value?: string;
 }
 
+interface Task {
+  id: string;
+  title: string;
+  dueDate?: string;
+  status: "pending" | "completed";
+  category?: string;
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
+}
+
+interface TaskAction {
+  action: "add" | "complete" | "delete";
+  title: string;
+  dueDate?: string;
+  category?: string;
+}
+
 // ── OpenAI tool definitions ──────────────────────────────────────────────────
 
 const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -68,13 +86,13 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "get_weather",
       description:
-        "Get current weather conditions for a location. Call when the user asks about weather, temperature, or conditions.",
+        "Get current weather for a location. Call when the user asks about weather, temperature, or conditions.",
       parameters: {
         type: "object",
         properties: {
           location: {
             type: "string",
-            description: "City name or location (e.g. 'London', 'New York', 'Tokyo')",
+            description: "City name or location (e.g. 'London', 'New York')",
           },
         },
         required: ["location"],
@@ -86,14 +104,13 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "get_datetime",
       description:
-        "Get the current date and time. Call when the user asks what time or date it is, or the day of the week.",
+        "Get the current date and time. Call when the user asks what time or date it is.",
       parameters: {
         type: "object",
         properties: {
           timezone: {
             type: "string",
-            description:
-              "IANA timezone name (e.g. 'America/New_York', 'Europe/London'). Use 'UTC' if unknown.",
+            description: "IANA timezone name. Use 'UTC' if unknown.",
           },
         },
       },
@@ -126,18 +143,12 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          title: {
-            type: "string",
-            description: "Short reminder title (5 words max)",
-          },
-          content: {
-            type: "string",
-            description: "Full reminder message",
-          },
+          title: { type: "string", description: "Short reminder title (5 words max)" },
+          content: { type: "string", description: "Full reminder message" },
           datetime: {
             type: "string",
             description:
-              "Absolute ISO 8601 datetime in UTC (e.g. '2024-11-15T15:00:00Z'). Compute from the current time provided in the system prompt.",
+              "Absolute ISO 8601 datetime in UTC. Compute from the current time in the system prompt.",
           },
         },
         required: ["title", "content", "datetime"],
@@ -149,14 +160,11 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "save_note",
       description:
-        "Save a quick note. Call when the user says 'note', 'write this down', 'remember this', 'capture', or similar — but NOT for personal facts about themselves (use save_memory for those).",
+        "Save a quick note. Call when the user says 'note', 'write this down', 'remember this', 'capture', or similar — but NOT for personal facts (use save_memory) or to-dos (use add_task).",
       parameters: {
         type: "object",
         properties: {
-          content: {
-            type: "string",
-            description: "The full note content to save",
-          },
+          content: { type: "string", description: "The full note content" },
         },
         required: ["content"],
       },
@@ -167,7 +175,7 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "save_memory",
       description:
-        "Save or update a personal fact or preference about the user — something Mo should remember long-term. Call when the user says 'remember that I...', 'keep in mind that I...', 'I want you to know that I...', 'note that I prefer...', or similar phrases about themselves.",
+        "Save a personal fact or long-term preference about the user. Call when the user says 'remember that I...', 'keep in mind that I...', 'I want you to know that I...', or similar.",
       parameters: {
         type: "object",
         properties: {
@@ -175,17 +183,16 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "string",
             enum: ["personal", "preferences", "schedule", "goals"],
             description:
-              "personal = identity facts (name, birthday, family). preferences = how they like things done. schedule = routines and timing. goals = aspirations and targets.",
+              "personal = identity. preferences = how they like things. schedule = routines. goals = aspirations.",
           },
           key: {
             type: "string",
             description:
-              "Short lowercase identifier for this fact (e.g. 'wake up time', 'preferred response style', 'current project'). Use consistent, descriptive keys.",
+              "Short lowercase identifier (e.g. 'wake up time', 'preferred tone'). Use consistent descriptive keys.",
           },
           value: {
             type: "string",
-            description:
-              "The value to remember, written concisely (e.g. '7 AM', 'brief and direct', 'launching Mo app by Q1')",
+            description: "The value to remember (e.g. '7 AM', 'brief and direct')",
           },
         },
         required: ["category", "key", "value"],
@@ -197,17 +204,82 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "delete_memory",
       description:
-        "Remove a specific remembered fact. Call when the user says 'forget that I...', 'stop remembering...', or asks Mo to remove a previously saved fact.",
+        "Remove a remembered fact. Call when the user says 'forget that I...', 'stop remembering...', or asks to remove a fact.",
       parameters: {
         type: "object",
         properties: {
           key: {
             type: "string",
-            description:
-              "The exact key of the memory to delete, as it appears in the current memories list in the system prompt.",
+            description: "The exact key of the memory to delete.",
           },
         },
         required: ["key"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_task",
+      description:
+        "Add a task to the user's task list. Call when the user says 'add a task', 'I need to', 'put on my list', 'create a task', 'task to', or mentions something they need to do.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description:
+              "Clear, concise task title (e.g. 'Call John', 'Buy groceries', 'Review report')",
+          },
+          dueDate: {
+            type: "string",
+            description:
+              "Optional ISO 8601 due date in UTC. Compute from the current datetime when user says 'tomorrow', 'by Friday', etc.",
+          },
+          category: {
+            type: "string",
+            enum: ["work", "personal", "health", "finance", "other"],
+            description: "Optional task category",
+          },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "complete_task",
+      description:
+        "Mark a task as complete. Call when the user says 'mark X done', 'complete my X task', 'I finished X', 'done with X', 'check off X'.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description:
+              "The task title or keyword to match (partial match is fine — 'John' matches 'Call John')",
+          },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_task",
+      description:
+        "Delete a task. Call when the user says 'delete my X task', 'remove X', 'cancel X task'.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "The task title or keyword to match",
+          },
+        },
+        required: ["title"],
       },
     },
   },
@@ -226,8 +298,7 @@ async function executeTool(
     case "get_datetime": {
       const tz = args.timezone ?? "UTC";
       try {
-        const now = new Date();
-        const formatted = now.toLocaleString("en-GB", {
+        const formatted = new Date().toLocaleString("en-GB", {
           timeZone: tz,
           weekday: "long",
           year: "numeric",
@@ -253,10 +324,19 @@ async function executeTool(
       return `Note captured: "${args.content}". Confirm to the user warmly, in one sentence.`;
 
     case "save_memory":
-      return `Memory saved: ${args.category} / "${args.key}" = "${args.value}". Confirm to the user naturally in one sentence — e.g. "I'll keep that in mind" or "Noted — I'll remember that." Keep it brief and warm.`;
+      return `Memory saved: ${args.category} / "${args.key}" = "${args.value}". Confirm naturally in one sentence — e.g. "I'll keep that in mind." Keep it brief and warm.`;
 
     case "delete_memory":
-      return `Memory removed for key "${args.key}". Confirm to the user in one sentence, gracefully — e.g. "Done, I've let that go."`;
+      return `Memory removed for key "${args.key}". Confirm gracefully in one sentence — e.g. "Done, I've let that go."`;
+
+    case "add_task":
+      return `Task added: "${args.title}"${args.dueDate ? ` due ${args.dueDate}` : ""}. Confirm warmly in one sentence — e.g. "Added to your list." Keep it brief.`;
+
+    case "complete_task":
+      return `Task "${args.title}" marked complete. Confirm warmly in one sentence — e.g. "Done — crossed off your list." Keep it brief.`;
+
+    case "delete_task":
+      return `Task "${args.title}" removed. Confirm in one sentence — e.g. "Removed from your list."`;
 
     default:
       return "Action not available.";
@@ -309,12 +389,7 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
 function buildMemorySection(memories: MemoryItem[]): string {
   if (!memories?.length) return "";
 
-  const order: Array<MemoryItem["category"]> = [
-    "personal",
-    "preferences",
-    "schedule",
-    "goals",
-  ];
+  const order: Array<MemoryItem["category"]> = ["personal", "preferences", "schedule", "goals"];
   const grouped: Partial<Record<MemoryItem["category"], MemoryItem[]>> = {};
   for (const m of memories) {
     if (!grouped[m.category]) grouped[m.category] = [];
@@ -326,14 +401,39 @@ function buildMemorySection(memories: MemoryItem[]): string {
     const items = grouped[cat];
     if (!items?.length) continue;
     const label = cat.charAt(0).toUpperCase() + cat.slice(1);
-    for (const item of items) {
-      lines.push(`• [${label}] ${item.key}: ${item.value}`);
-    }
+    for (const item of items) lines.push(`• [${label}] ${item.key}: ${item.value}`);
   }
 
   if (!lines.length) return "";
 
-  return `\n\nWhat you know about this person:\n${lines.join("\n")}\n\nUse these naturally in conversation. Do not recite them as a list unless the user explicitly asks what you remember. When relevant, weave them in with warmth.`;
+  return `\n\nWhat you know about this person:\n${lines.join("\n")}\n\nUse these naturally in conversation. Do not recite them unless the user explicitly asks what you remember.`;
+}
+
+function buildTasksSection(tasks: Task[]): string {
+  const pending = tasks?.filter((t) => t.status === "pending") ?? [];
+  if (!pending.length) return "";
+
+  const formatDate = (iso: string): string => {
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const todayStr = now.toDateString();
+      const tomorrowStr = new Date(now.getTime() + 86_400_000).toDateString();
+      if (d.toDateString() === todayStr) return "today";
+      if (d.toDateString() === tomorrowStr) return "tomorrow";
+      return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+    } catch {
+      return iso;
+    }
+  };
+
+  const lines = pending.slice(0, 20).map((t) => {
+    const catPart = t.category ? `[${t.category}] ` : "";
+    const duePart = t.dueDate ? ` — due ${formatDate(t.dueDate)}` : "";
+    return `• ${catPart}${t.title}${duePart}`;
+  });
+
+  return `\n\nUser's pending tasks (${pending.length} total):\n${lines.join("\n")}\n\nWhen asked about tasks, summarise them naturally. When completing or deleting, confirm which task was affected.`;
 }
 
 function buildSystemPrompt(
@@ -344,21 +444,18 @@ function buildSystemPrompt(
     timezone?: string;
     responseLength?: string;
   } | null,
-  memories?: MemoryItem[]
+  memories?: MemoryItem[],
+  tasks?: Task[]
 ): string {
   const base = MODE_PROMPTS[mode] ?? MODE_PROMPTS.executive;
   const now = new Date().toUTCString();
   const parts = [base, `\nCurrent datetime (UTC): ${now}.`];
 
-  if (preferences?.timezone) {
-    parts.push(`User timezone: ${preferences.timezone}.`);
-  }
-  if (preferences?.name) {
-    parts.push(`User's name: ${preferences.name}.`);
-  }
+  if (preferences?.timezone) parts.push(`User timezone: ${preferences.timezone}.`);
+  if (preferences?.name) parts.push(`User's name: ${preferences.name}.`);
   if (preferences?.location) {
     parts.push(
-      `User's default location: ${preferences.location}. Use this for weather queries when no location is specified.`
+      `User's default location: ${preferences.location}. Use for weather when no location is given.`
     );
   }
   if (preferences?.responseLength) {
@@ -367,12 +464,15 @@ function buildSystemPrompt(
       medium: "Keep responses to 1–2 sentences.",
       long: "You may use up to 3 sentences when depth adds value.",
     };
-    const lenInstruction = lenMap[preferences.responseLength];
-    if (lenInstruction) parts.push(lenInstruction);
+    const inst = lenMap[preferences.responseLength];
+    if (inst) parts.push(inst);
   }
 
   const memorySection = buildMemorySection(memories ?? []);
   if (memorySection) parts.push(memorySection);
+
+  const taskSection = buildTasksSection(tasks ?? []);
+  if (taskSection) parts.push(taskSection);
 
   return parts.join(" ");
 }
@@ -382,6 +482,7 @@ type ToolCallResult = {
   reminder?: { title: string; content: string; datetime: string };
   note?: { content: string };
   memoryAction?: MemoryAction;
+  taskAction?: TaskAction;
 };
 
 async function runWithTools(
@@ -389,7 +490,6 @@ async function runWithTools(
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   maxTokens: number
 ): Promise<{ reply: string; toolResult: ToolCallResult | null }> {
-  // First call — may trigger a tool
   const firstCompletion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [{ role: "system", content: systemPrompt }, ...messages],
@@ -402,12 +502,8 @@ async function runWithTools(
   const firstChoice = firstCompletion.choices[0];
   const assistantMessage = firstChoice?.message;
 
-  // No tool call — direct answer
   if (!assistantMessage?.tool_calls?.length) {
-    return {
-      reply: assistantMessage?.content?.trim() ?? "",
-      toolResult: null,
-    };
+    return { reply: assistantMessage?.content?.trim() ?? "", toolResult: null };
   }
 
   const toolCall = assistantMessage.tool_calls[0];
@@ -421,14 +517,14 @@ async function runWithTools(
 
   const toolOutput = await executeTool(toolName, toolArgs);
 
-  // Build tool result metadata for client
+  // Build client-side metadata for side effects
   const toolResult: ToolCallResult = { functionCalled: toolName };
 
   if (toolName === "set_reminder") {
     toolResult.reminder = {
       title: toolArgs.title ?? "",
       content: toolArgs.content ?? "",
-      datetime: toolArgs.datetime ?? new Date(Date.now() + 3600_000).toISOString(),
+      datetime: toolArgs.datetime ?? new Date(Date.now() + 3_600_000).toISOString(),
     };
   }
   if (toolName === "save_note") {
@@ -443,32 +539,36 @@ async function runWithTools(
     };
   }
   if (toolName === "delete_memory") {
-    toolResult.memoryAction = {
-      action: "delete",
-      key: toolArgs.key ?? "",
+    toolResult.memoryAction = { action: "delete", key: toolArgs.key ?? "" };
+  }
+  if (toolName === "add_task") {
+    toolResult.taskAction = {
+      action: "add",
+      title: toolArgs.title ?? "",
+      dueDate: toolArgs.dueDate,
+      category: toolArgs.category,
     };
   }
+  if (toolName === "complete_task") {
+    toolResult.taskAction = { action: "complete", title: toolArgs.title ?? "" };
+  }
+  if (toolName === "delete_task") {
+    toolResult.taskAction = { action: "delete", title: toolArgs.title ?? "" };
+  }
 
-  // Second call — synthesize final response using tool result
   const secondCompletion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       { role: "system", content: systemPrompt },
       ...messages,
       assistantMessage,
-      {
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: toolOutput,
-      },
+      { role: "tool", tool_call_id: toolCall.id, content: toolOutput },
     ],
     max_tokens: maxTokens,
     temperature: 0.6,
   });
 
-  const reply =
-    secondCompletion.choices[0]?.message?.content?.trim() ?? "";
-
+  const reply = secondCompletion.choices[0]?.message?.content?.trim() ?? "";
   return { reply, toolResult };
 }
 
@@ -481,38 +581,34 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const { message, mode = "executive", messages = [], preferences, memories } =
+  const { message, mode = "executive", messages = [], preferences, memories, tasks } =
     parsed.data;
 
   const systemPrompt = buildSystemPrompt(
     mode,
     preferences ?? null,
-    (memories as MemoryItem[]) ?? []
+    (memories as MemoryItem[]) ?? [],
+    (tasks as Task[]) ?? []
   );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
-  const conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-    [
-      ...(messages ?? []).slice(-10).map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
-      { role: "user" as const, content: message },
-    ];
+  const conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    ...(messages ?? []).slice(-10).map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user" as const, content: message },
+  ];
 
   try {
-    const { reply, toolResult } = await runWithTools(
-      systemPrompt,
-      conversationMessages,
-      maxTokens
-    );
-
+    const { reply, toolResult } = await runWithTools(systemPrompt, conversationMessages, maxTokens);
     res.json({
       reply,
       functionCalled: toolResult?.functionCalled,
       reminder: toolResult?.reminder,
       note: toolResult?.note,
       memoryAction: toolResult?.memoryAction,
+      taskAction: toolResult?.taskAction,
     });
   } catch (err: any) {
     req.log.error({ err }, "Mo chat error");
@@ -552,12 +648,14 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     messages = [],
     preferences,
     memories,
+    tasks,
   } = parsed.data;
 
   const systemPrompt = buildSystemPrompt(
     mode,
     preferences ?? null,
-    (memories as MemoryItem[]) ?? []
+    (memories as MemoryItem[]) ?? [],
+    (tasks as Task[]) ?? []
   );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
@@ -586,22 +684,17 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       return;
     }
 
-    // 2. Build conversation messages
-    const conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-      [
-        ...(messages ?? []).slice(-10).map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        })),
-        { role: "user" as const, content: transcript },
-      ];
+    // 2. Conversation messages
+    const conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      ...(messages ?? []).slice(-10).map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+      { role: "user" as const, content: transcript },
+    ];
 
-    // 3. Get Mo's reply (with tool calling + memory-aware prompt)
-    const { reply, toolResult } = await runWithTools(
-      systemPrompt,
-      conversationMessages,
-      maxTokens
-    );
+    // 3. GPT reply with tool calling
+    const { reply, toolResult } = await runWithTools(systemPrompt, conversationMessages, maxTokens);
 
     if (!reply) {
       res.json({ transcript, reply: "", audioBase64: "" });
@@ -620,6 +713,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       reminder: toolResult?.reminder,
       note: toolResult?.note,
       memoryAction: toolResult?.memoryAction,
+      taskAction: toolResult?.taskAction,
     });
   } catch (err: any) {
     req.log.error({ err }, "Voice pipeline error");

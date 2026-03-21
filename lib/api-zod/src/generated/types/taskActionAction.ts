@@ -6,10 +6,11 @@
  * OpenAPI spec version: 0.4.0
  */
 
-export type MemoryActionAction =
-  (typeof MemoryActionAction)[keyof typeof MemoryActionAction];
+export type TaskActionAction =
+  (typeof TaskActionAction)[keyof typeof TaskActionAction];
 
-export const MemoryActionAction = {
-  save: "save",
+export const TaskActionAction = {
+  add: "add",
+  complete: "complete",
   delete: "delete",
 } as const;

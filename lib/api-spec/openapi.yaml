@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Api
-  version: 0.3.0
+  version: 0.4.0
   description: Mo AI Voice Assistant API
 servers:
   - url: /api
@@ -138,10 +138,8 @@ components:
           enum: [personal, preferences, schedule, goals]
         key:
           type: string
-          description: Short identifier for the fact, e.g. "wake up time"
         value:
           type: string
-          description: The value, e.g. "7 AM"
         createdAt:
           type: number
         updatedAt:
@@ -149,7 +147,6 @@ components:
       required: [id, category, key, value, createdAt, updatedAt]
     MemoryAction:
       type: object
-      description: Memory operation triggered by this response
       properties:
         action:
           type: string
@@ -162,6 +159,44 @@ components:
         value:
           type: string
       required: [action, key]
+    Task:
+      type: object
+      description: A user task
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        dueDate:
+          type: string
+          description: Optional ISO 8601 due date in UTC
+        status:
+          type: string
+          enum: [pending, completed]
+        category:
+          type: string
+          description: "Optional: work, personal, health, finance, other"
+        createdAt:
+          type: number
+        updatedAt:
+          type: number
+        completedAt:
+          type: number
+      required: [id, title, status, createdAt, updatedAt]
+    TaskAction:
+      type: object
+      description: Task operation triggered by this response
+      properties:
+        action:
+          type: string
+          enum: [add, complete, delete]
+        title:
+          type: string
+        dueDate:
+          type: string
+        category:
+          type: string
+      required: [action, title]
     ReminderData:
       type: object
       properties:
@@ -199,7 +234,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MemoryItem"
-          description: Current remembered facts about the user
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+          description: Current pending tasks for context
       required: [message]
     ChatResponse:
       type: object
@@ -214,6 +253,8 @@ components:
           $ref: "#/components/schemas/NoteData"
         memoryAction:
           $ref: "#/components/schemas/MemoryAction"
+        taskAction:
+          $ref: "#/components/schemas/TaskAction"
       required: [reply]
     SpeakRequest:
       type: object
@@ -239,14 +280,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ConversationMessage"
-          description: Previous conversation turns for continuity
         preferences:
           $ref: "#/components/schemas/UserPreferences"
         memories:
           type: array
           items:
             $ref: "#/components/schemas/MemoryItem"
-          description: Current remembered facts about the user
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+          description: Current pending tasks for context
       required: [audio]
     VoiceResponse:
       type: object
@@ -265,6 +309,8 @@ components:
           $ref: "#/components/schemas/NoteData"
         memoryAction:
           $ref: "#/components/schemas/MemoryAction"
+        taskAction:
+          $ref: "#/components/schemas/TaskAction"
       required: [transcript, reply, audioBase64]
     ErrorResponse:
       type: object
