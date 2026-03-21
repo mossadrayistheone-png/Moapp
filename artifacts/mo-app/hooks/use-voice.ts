@@ -1,6 +1,6 @@
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import type { MemoryItem, Task } from "@/context/AppContext";
 import type { Note } from "@/hooks/use-notes";
@@ -104,6 +104,8 @@ export interface VoiceCallbacks {
 const BASE_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
 
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
+  // Enable metering so we can read dBFS levels for silence detection
+  isMeteringEnabled: true,
   android: {
     extension: ".m4a",
     outputFormat: Audio.AndroidOutputFormat.MPEG_4,
@@ -125,6 +127,14 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
   },
   web: {},
 };
+
+// ── Silence detection thresholds ─────────────────────────────────────────────
+
+// Metering values are in dBFS (0 = full scale, -160 = silence)
+const SPEECH_THRESHOLD_DB  = -35; // above this = user is speaking
+const SILENCE_THRESHOLD_DB = -42; // below this = silence
+const SILENCE_FRAMES       = 7;   // 7 × 200 ms = 1.4 s of sustained silence
+const MAX_RECORD_MS        = 30_000; // absolute cap before auto-stop
 
 interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
@@ -159,9 +169,27 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const stateRef = useRef<AssistantState>("idle");
 
+  // Silence-detection timers
+  const silenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Ref to stopAndProcess so startRecording can call it without a circular dep
+  const stopAndProcessRef = useRef<(() => void) | null>(null);
+
   const setStateSync = (s: AssistantState) => {
     stateRef.current = s;
     setState(s);
+  };
+
+  const clearRecordingTimers = () => {
+    if (silenceIntervalRef.current !== null) {
+      clearInterval(silenceIntervalRef.current);
+      silenceIntervalRef.current = null;
+    }
+    if (maxDurationTimerRef.current !== null) {
+      clearTimeout(maxDurationTimerRef.current);
+      maxDurationTimerRef.current = null;
+    }
   };
 
   const startRecording = useCallback(async () => {
@@ -188,6 +216,54 @@ export function useVoice(options: UseVoiceOptions = {}) {
       setTranscript("");
       setReply("");
       setStateSync("listening");
+
+      // ── Silence detection (native only — web has no metering) ────────────
+      if (Platform.OS !== "web") {
+        let speechDetected = false;
+        let silenceFrameCount = 0;
+
+        silenceIntervalRef.current = setInterval(async () => {
+          if (stateRef.current !== "listening") {
+            clearRecordingTimers();
+            return;
+          }
+          try {
+            const status = await recording.getStatusAsync();
+            const db: number = (status as any).metering ?? -160;
+
+            if (!speechDetected) {
+              // Wait until user actually starts speaking before monitoring silence
+              if (db > SPEECH_THRESHOLD_DB) {
+                speechDetected = true;
+                silenceFrameCount = 0;
+              }
+            } else {
+              if (db < SILENCE_THRESHOLD_DB) {
+                silenceFrameCount++;
+                if (silenceFrameCount >= SILENCE_FRAMES) {
+                  // Enough silence after speech — auto-stop
+                  clearRecordingTimers();
+                  stopAndProcessRef.current?.();
+                }
+              } else {
+                // Still talking — reset the silence counter
+                silenceFrameCount = 0;
+              }
+            }
+          } catch {
+            // Metering read failed — ignore and keep polling
+          }
+        }, 200);
+      }
+
+      // Absolute max-duration safety net for both native and web
+      maxDurationTimerRef.current = setTimeout(() => {
+        clearRecordingTimers();
+        if (stateRef.current === "listening") {
+          stopAndProcessRef.current?.();
+        }
+      }, MAX_RECORD_MS);
+
     } catch (err) {
       console.error("Failed to start recording:", err);
       setErrorMessage("Could not start recording.");
@@ -197,6 +273,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
   }, []);
 
   const stopAndProcess = useCallback(async () => {
+    // Cancel any running silence / max-duration timers
+    clearRecordingTimers();
+
     const recording = recordingRef.current;
     if (!recording) return;
 
@@ -407,6 +486,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
       setTimeout(() => setStateSync("idle"), 3000);
     }
   }, [mode, conversationHistory, memories, tasks, reminders, preferences, autoplay, callbacks]);
+
+  // Keep the ref current so startRecording's interval always calls the
+  // latest version of stopAndProcess (avoids stale-closure issues).
+  useEffect(() => {
+    stopAndProcessRef.current = stopAndProcess;
+  }, [stopAndProcess]);
 
   const stopSpeaking = useCallback(async () => {
     if (soundRef.current) {
