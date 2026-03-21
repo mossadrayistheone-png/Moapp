@@ -76,6 +76,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /mo/voice:
+    post:
+      operationId: moVoice
+      tags: [mo]
+      summary: Full voice pipeline for native mobile
+      description: Accepts base64-encoded audio, transcribes, gets Mo reply, synthesizes speech, returns all as JSON
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoiceRequest"
+      responses:
+        "200":
+          description: Transcript, reply text, and base64 audio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -114,6 +139,40 @@ components:
           description: Text to convert to speech
       required:
         - text
+    VoiceRequest:
+      type: object
+      properties:
+        audio:
+          type: string
+          description: Base64-encoded audio file
+        format:
+          type: string
+          enum: [m4a, mp4, wav, caf]
+          default: m4a
+          description: Audio file format
+        mode:
+          type: string
+          enum: [executive, creative, motivational]
+          default: executive
+          description: The assistant personality mode
+      required:
+        - audio
+    VoiceResponse:
+      type: object
+      properties:
+        transcript:
+          type: string
+          description: What the user said
+        reply:
+          type: string
+          description: Mo's text response
+        audioBase64:
+          type: string
+          description: Base64-encoded MP3 audio of Mo's reply
+      required:
+        - transcript
+        - reply
+        - audioBase64
     ErrorResponse:
       type: object
       properties:

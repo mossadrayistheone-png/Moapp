@@ -12,3 +12,7 @@ export * from "./chatResponse";
 export * from "./errorResponse";
 export * from "./healthStatus";
 export * from "./speakRequest";
+export * from "./voiceRequest";
+export * from "./voiceRequestFormat";
+export * from "./voiceRequestMode";
+export * from "./voiceResponse";

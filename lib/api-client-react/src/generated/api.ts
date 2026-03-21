@@ -22,6 +22,8 @@ import type {
   ErrorResponse,
   HealthStatus,
   SpeakRequest,
+  VoiceRequest,
+  VoiceResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -281,4 +283,91 @@ export const useMoSpeak = <
   TContext
 > => {
   return useMutation(getMoSpeakMutationOptions(options));
+};
+
+/**
+ * Accepts base64-encoded audio, transcribes, gets Mo reply, synthesizes speech, returns all as JSON
+ * @summary Full voice pipeline for native mobile
+ */
+export const getMoVoiceUrl = () => {
+  return `/api/mo/voice`;
+};
+
+export const moVoice = async (
+  voiceRequest: VoiceRequest,
+  options?: RequestInit,
+): Promise<VoiceResponse> => {
+  return customFetch<VoiceResponse>(getMoVoiceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(voiceRequest),
+  });
+};
+
+export const getMoVoiceMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof moVoice>>,
+    TError,
+    { data: BodyType<VoiceRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof moVoice>>,
+  TError,
+  { data: BodyType<VoiceRequest> },
+  TContext
+> => {
+  const mutationKey = ["moVoice"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof moVoice>>,
+    { data: BodyType<VoiceRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return moVoice(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MoVoiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof moVoice>>
+>;
+export type MoVoiceMutationBody = BodyType<VoiceRequest>;
+export type MoVoiceMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Full voice pipeline for native mobile
+ */
+export const useMoVoice = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof moVoice>>,
+    TError,
+    { data: BodyType<VoiceRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof moVoice>>,
+  TError,
+  { data: BodyType<VoiceRequest> },
+  TContext
+> => {
+  return useMutation(getMoVoiceMutationOptions(options));
 };

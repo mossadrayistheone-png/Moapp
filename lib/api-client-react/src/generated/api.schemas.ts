@@ -38,6 +38,49 @@ export interface SpeakRequest {
   text: string;
 }
 
+/**
+ * Audio file format
+ */
+export type VoiceRequestFormat =
+  (typeof VoiceRequestFormat)[keyof typeof VoiceRequestFormat];
+
+export const VoiceRequestFormat = {
+  m4a: "m4a",
+  mp4: "mp4",
+  wav: "wav",
+  caf: "caf",
+} as const;
+
+/**
+ * The assistant personality mode
+ */
+export type VoiceRequestMode =
+  (typeof VoiceRequestMode)[keyof typeof VoiceRequestMode];
+
+export const VoiceRequestMode = {
+  executive: "executive",
+  creative: "creative",
+  motivational: "motivational",
+} as const;
+
+export interface VoiceRequest {
+  /** Base64-encoded audio file */
+  audio: string;
+  /** Audio file format */
+  format?: VoiceRequestFormat;
+  /** The assistant personality mode */
+  mode?: VoiceRequestMode;
+}
+
+export interface VoiceResponse {
+  /** What the user said */
+  transcript: string;
+  /** Mo's text response */
+  reply: string;
+  /** Base64-encoded MP3 audio of Mo's reply */
+  audioBase64: string;
+}
+
 export interface ErrorResponse {
   error: string;
 }

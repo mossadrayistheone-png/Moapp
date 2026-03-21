@@ -40,3 +40,28 @@ export const MoChatResponse = zod.object({
 export const MoSpeakBody = zod.object({
   text: zod.string().describe("Text to convert to speech"),
 });
+
+/**
+ * Accepts base64-encoded audio, transcribes, gets Mo reply, synthesizes speech, returns all as JSON
+ * @summary Full voice pipeline for native mobile
+ */
+export const moVoiceBodyFormatDefault = `m4a`;
+export const moVoiceBodyModeDefault = `executive`;
+
+export const MoVoiceBody = zod.object({
+  audio: zod.string().describe("Base64-encoded audio file"),
+  format: zod
+    .enum(["m4a", "mp4", "wav", "caf"])
+    .default(moVoiceBodyFormatDefault)
+    .describe("Audio file format"),
+  mode: zod
+    .enum(["executive", "creative", "motivational"])
+    .default(moVoiceBodyModeDefault)
+    .describe("The assistant personality mode"),
+});
+
+export const MoVoiceResponse = zod.object({
+  transcript: zod.string().describe("What the user said"),
+  reply: zod.string().describe("Mo's text response"),
+  audioBase64: zod.string().describe("Base64-encoded MP3 audio of Mo's reply"),
+});
