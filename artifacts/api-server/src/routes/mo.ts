@@ -520,10 +520,10 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
       },
       body: JSON.stringify({
         text,
-        model_id: "eleven_monolingual_v1",
+        model_id: "eleven_turbo_v2_5",
         voice_settings: {
-          stability: 0.75,
-          similarity_boost: 0.75,
+          stability: 0.72,
+          similarity_boost: 0.78,
           style: 0.0,
           use_speaker_boost: true,
         },
@@ -707,6 +707,37 @@ type ToolCallResult = {
   plan?: DayPlan;
 };
 
+// Tools that need no second GPT call — the response is a fixed, Mo-style one-liner.
+// Saves ~300–500 ms per action request.
+const ACTION_TOOLS = new Set([
+  "save_note",
+  "delete_note",
+  "save_memory",
+  "delete_memory",
+  "add_task",
+  "complete_task",
+  "delete_task",
+  "set_reminder",
+  "delete_reminder",
+  "plan_day",
+]);
+
+function getQuickReply(toolName: string, args: Record<string, string>): string {
+  switch (toolName) {
+    case "save_note":      return args.title ? `Noted — saved as "${args.title}".` : "Got it, saved.";
+    case "delete_note":    return "Done, that note is gone.";
+    case "save_memory":    return "I'll keep that in mind.";
+    case "delete_memory":  return "Done, I've let that go.";
+    case "add_task":       return args.title ? `Added "${args.title}" to your list.` : "Added to your list.";
+    case "complete_task":  return "Done — crossed off your list.";
+    case "delete_task":    return "Removed from your list.";
+    case "set_reminder":   return args.title ? `Reminder set: ${args.title}.` : "Reminder set.";
+    case "delete_reminder":return "Reminder cleared.";
+    case "plan_day":       return args.title ? `${args.title} is ready.` : "Your plan is ready.";
+    default:               return "";
+  }
+}
+
 async function runWithTools(
   systemPrompt: string,
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
@@ -737,6 +768,7 @@ async function runWithTools(
     // ignore parse errors
   }
 
+  // Execute the tool (local logic or external API)
   const toolOutput = await executeTool(toolName, toolArgs);
 
   // Build client-side metadata for side effects
@@ -760,7 +792,6 @@ async function runWithTools(
     toolResult.noteAction = { action: "delete", keyword: toolArgs.keyword ?? "" };
   }
   if (toolName === "plan_day") {
-    // toolArgs is already parsed from toolCall.function.arguments above
     if (toolArgs.title && toolArgs.timeframe && toolArgs.blocks) {
       toolResult.plan = toolArgs as unknown as DayPlan;
     }
@@ -794,6 +825,14 @@ async function runWithTools(
     toolResult.reminderAction = { action: "delete", title: toolArgs.title ?? "" };
   }
 
+  // ── Fast path: skip second GPT call for action tools ─────────────────────
+  // These tools need no data lookup or synthesis — a pre-written Mo-style
+  // one-liner is faster (saves ~300–500 ms) and just as good.
+  if (ACTION_TOOLS.has(toolName)) {
+    return { reply: getQuickReply(toolName, toolArgs), toolResult };
+  }
+
+  // ── Slow path: second GPT call for data-lookup tools (weather, search, time)
   const secondCompletion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [

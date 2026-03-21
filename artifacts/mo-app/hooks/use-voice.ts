@@ -466,8 +466,8 @@ export function useVoice(options: UseVoiceOptions = {}) {
         return;
       }
 
-      // Natural pre-speech pause
-      await new Promise<void>((resolve) => setTimeout(resolve, 600));
+      // Minimal buffer so the UI can update before audio starts
+      await new Promise<void>((resolve) => setTimeout(resolve, 80));
 
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
