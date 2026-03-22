@@ -1,4 +1,9 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { exec } from "child_process";
+import { promisify } from "util";
+import fs from "fs";
+import os from "os";
+import nodePath from "path";
 import OpenAI from "openai";
 import {
   MoChatBody,
@@ -7,6 +12,29 @@ import {
 } from "@workspace/api-zod";
 import { getWeather } from "../services/weather.js";
 import { webSearch } from "../services/search.js";
+
+const execAsync = promisify(exec);
+
+// Normalise any incoming audio to 16-kHz mono WAV using ffmpeg.
+// WAV is universally accepted by Whisper regardless of what the Android device
+// actually recorded. Falls back to the original buffer if ffmpeg is unavailable.
+async function normaliseAudio(audioBuffer: Buffer, ext: string): Promise<{ buffer: Buffer; filename: string }> {
+  const tmpId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const inPath  = nodePath.join(os.tmpdir(), `mo-in-${tmpId}.${ext}`);
+  const outPath = nodePath.join(os.tmpdir(), `mo-out-${tmpId}.wav`);
+  try {
+    fs.writeFileSync(inPath, audioBuffer);
+    await execAsync(`ffmpeg -y -i "${inPath}" -ar 16000 -ac 1 -f wav "${outPath}" 2>/dev/null`);
+    const wavBuffer = fs.readFileSync(outPath);
+    return { buffer: wavBuffer, filename: "rec.wav" };
+  } catch {
+    // ffmpeg unavailable or conversion failed — send original and hope for the best
+    return { buffer: audioBuffer, filename: `rec.${ext}` };
+  } finally {
+    try { fs.unlinkSync(inPath); } catch { /* ignore */ }
+    try { fs.unlinkSync(outPath); } catch { /* ignore */ }
+  }
+}
 
 const router: IRouter = Router();
 
@@ -976,19 +1004,15 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
 
   try {
     // ── Stage 1: Whisper transcription ─────────────────────────────────────
-    const audioBuffer = Buffer.from(audio, "base64");
-    // M4A is MPEG-4 Audio — correct IANA MIME type is audio/mp4 (not audio/m4a)
-    // OpenAI Whisper validates the MIME type and rejects non-standard types
-    const mimeMap: Record<string, string> = {
-      m4a: "audio/mp4",
-      mp4: "audio/mp4",
-      wav: "audio/wav",
-      webm: "audio/webm",
-      caf: "audio/x-caf",
-    };
-    const audioFile = new File([audioBuffer], `rec.${format}`, {
-      type: mimeMap[format] ?? "audio/mp4",
-    });
+    const rawBuffer = Buffer.from(audio, "base64");
+
+    // Normalise to WAV using ffmpeg so Whisper always receives a format it
+    // accepts unambiguously — avoids MIME-type and codec issues from Android.
+    req.log.info({ stage: "ffmpeg_start", ms: elapsed(), inputBytes: rawBuffer.byteLength }, "Voice pipeline");
+    const { buffer: audioBuffer, filename } = await normaliseAudio(rawBuffer, format);
+    req.log.info({ stage: "ffmpeg_done", ms: elapsed(), outputBytes: audioBuffer.byteLength, filename }, "Voice pipeline");
+
+    const audioFile = new File([audioBuffer], filename, { type: "audio/wav" });
 
     req.log.info({ stage: "whisper_start", ms: elapsed() }, "Voice pipeline");
 

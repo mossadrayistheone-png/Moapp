@@ -1,4 +1,5 @@
 import { ResizeMode, Video } from "expo-av";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -149,6 +150,36 @@ function StatusLabel({ state }: { state: string }) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [activePlan, setActivePlan] = useState<DayPlan | null>(null);
+
+  // ── Video: download once and play from local cache ────────────────────────
+  // Streaming a 134MB video from a remote URL is unreliable over mobile.
+  // We download it on first launch, cache it permanently, and play locally.
+  const [videoUri, setVideoUri] = useState<string | null>(null);
+  const localVideoPath = `${FileSystem.cacheDirectory}mo-background.mp4`;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function prepareVideo() {
+      try {
+        const info = await FileSystem.getInfoAsync(localVideoPath);
+        if (info.exists) {
+          if (!cancelled) setVideoUri(localVideoPath);
+          return;
+        }
+        // Not cached yet — download from server
+        const dl = FileSystem.createDownloadResumable(VIDEO_URL, localVideoPath, {});
+        const result = await dl.downloadAsync();
+        if (!cancelled && result?.uri) setVideoUri(result.uri);
+      } catch {
+        // Download failed — fall back to remote URL so video still attempts to play
+        if (!cancelled) setVideoUri(VIDEO_URL);
+      }
+    }
+    prepareVideo();
+    return () => { cancelled = true; };
+  }, []);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const {
     preferences,
     conversationHistory,
@@ -288,23 +319,16 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Background video */}
-      {preferences.backgroundEnabled && (
+      {/* Background video — plays from local cache (downloaded on first launch) */}
+      {preferences.backgroundEnabled && videoUri && (
         <Video
           ref={videoRef}
-          source={{ uri: VIDEO_URL }}
+          source={{ uri: videoUri }}
           style={StyleSheet.absoluteFillObject}
           resizeMode={ResizeMode.COVER}
           isLooping
           isMuted
           shouldPlay
-          onLoad={async (s: any) => {
-            if (s.durationMillis && videoRef.current) {
-              await videoRef.current.setPositionAsync(
-                Math.random() * s.durationMillis * 0.7
-              );
-            }
-          }}
         />
       )}
 
