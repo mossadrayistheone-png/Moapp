@@ -31,33 +31,18 @@ export default function Home() {
 
       {/* Brand mark — safe area top */}
       <header
-        className="absolute top-0 w-full flex justify-between items-start z-10"
-        style={{ paddingTop: "max(env(safe-area-inset-top), 2rem)", paddingLeft: "1.25rem", paddingRight: "1.25rem" }}
+        className="absolute top-0 w-full flex justify-center z-10 pointer-events-none"
+        style={{ paddingTop: "max(env(safe-area-inset-top), 2rem)", paddingLeft: "1rem", paddingRight: "1rem" }}
       >
-        <div className="w-16" />
         <motion.h1
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="font-display text-2xl sm:text-3xl font-medium tracking-widest text-primary italic pointer-events-none"
+          className="font-display text-2xl sm:text-3xl font-medium tracking-widest text-primary italic"
           style={{ textShadow: "0 2px 20px rgba(0,0,0,0.9), 0 0 20px hsl(45 61% 56% / 0.3)" }}
         >
           Mo.
         </motion.h1>
-        <motion.a
-          href="/mo-app-v8.apk"
-          download="mo-app-v8.apk"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="w-16 flex justify-end items-center gap-1 text-[10px] font-medium tracking-widest uppercase text-primary/60 hover:text-primary transition-colors duration-300"
-          style={{ textShadow: "0 1px 8px rgba(0,0,0,0.9)" }}
-        >
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6 1v7M3 6l3 3 3-3M2 11h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          APK
-        </motion.a>
       </header>
 
       {/* Text area — vertically centred, pushed up from the controls */}
