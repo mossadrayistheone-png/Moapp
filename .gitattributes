@@ -2,3 +2,4 @@ artifacts/mo/public/background.mp4 filter=lfs diff=lfs merge=lfs -text
 attached_assets/lv_0_20260320141159_1774035014653.mp4 filter=lfs diff=lfs merge=lfs -text
 mo-project.zip filter=lfs diff=lfs merge=lfs -text
 mo-app-v6.apk filter=lfs diff=lfs merge=lfs -text
+mo-app-v7.apk filter=lfs diff=lfs merge=lfs -text
