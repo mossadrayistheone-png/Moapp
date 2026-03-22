@@ -977,14 +977,17 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
   try {
     // ── Stage 1: Whisper transcription ─────────────────────────────────────
     const audioBuffer = Buffer.from(audio, "base64");
+    // M4A is MPEG-4 Audio — correct IANA MIME type is audio/mp4 (not audio/m4a)
+    // OpenAI Whisper validates the MIME type and rejects non-standard types
     const mimeMap: Record<string, string> = {
-      m4a: "audio/m4a",
+      m4a: "audio/mp4",
       mp4: "audio/mp4",
       wav: "audio/wav",
+      webm: "audio/webm",
       caf: "audio/x-caf",
     };
     const audioFile = new File([audioBuffer], `rec.${format}`, {
-      type: mimeMap[format] ?? "audio/m4a",
+      type: mimeMap[format] ?? "audio/mp4",
     });
 
     req.log.info({ stage: "whisper_start", ms: elapsed() }, "Voice pipeline");
