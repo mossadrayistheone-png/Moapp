@@ -394,10 +394,14 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       // 28 s client-side timeout — slightly longer than the server's 24 s deadline
       // so the server always gets a chance to send a structured error before we abort.
+      // Use manual AbortController instead of AbortSignal.timeout() which is not
+      // supported in the Hermes engine bundled with this version of React Native.
+      const fetchController = new AbortController();
+      const fetchTimeoutId = setTimeout(() => fetchController.abort(), 28_000);
       const response = await fetch(`${BASE_URL}/api/mo/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(28_000),
+        signal: fetchController.signal,
         body: JSON.stringify({
           audio: audioBase64,
           format: audioFormat,
@@ -416,7 +420,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
               }
             : undefined,
         }),
-      });
+      }).finally(() => clearTimeout(fetchTimeoutId));
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));

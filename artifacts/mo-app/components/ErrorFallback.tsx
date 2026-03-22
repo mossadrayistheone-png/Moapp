@@ -1,6 +1,6 @@
-import { Feather } from "@expo/vector-icons";
 import { reloadAppAsync } from "expo";
 import React, { useState } from "react";
+import Svg, { Circle, Line, Path } from "react-native-svg";
 import {
   Modal,
   Platform,
@@ -73,7 +73,11 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
             },
           ]}
         >
-          <Feather name="alert-circle" size={20} color={theme.text} />
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+              <Circle cx="12" cy="12" r="10" stroke={theme.text} strokeWidth="2" />
+              <Line x1="12" y1="8" x2="12" y2="12" stroke={theme.text} strokeWidth="2" strokeLinecap="round" />
+              <Line x1="12" y1="16" x2="12.01" y2="16" stroke={theme.text} strokeWidth="2" strokeLinecap="round" />
+            </Svg>
         </Pressable>
       ) : null}
 
@@ -139,7 +143,9 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                     { opacity: pressed ? 0.6 : 1 },
                   ]}
                 >
-                  <Feather name="x" size={24} color={theme.text} />
+                  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                      <Path d="M18 6L6 18M6 6l12 12" stroke={theme.text} strokeWidth="2" strokeLinecap="round" />
+                    </Svg>
                 </Pressable>
               </View>
 
