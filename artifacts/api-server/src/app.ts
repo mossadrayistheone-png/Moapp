@@ -1,3 +1,4 @@
+import path from "path";
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
@@ -30,6 +31,19 @@ app.use(cors());
 // (a 10-second m4a recording can be ~300 KB base64-encoded, WebM larger)
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
+
+// Serve static assets (e.g. background.mp4 for the mobile app)
+app.use(
+  express.static(path.resolve("public"), {
+    maxAge: "1d",
+    setHeaders(res, filePath) {
+      if (filePath.endsWith(".mp4")) {
+        res.setHeader("Content-Type", "video/mp4");
+        res.setHeader("Accept-Ranges", "bytes");
+      }
+    },
+  })
+);
 
 app.use("/api", router);
 

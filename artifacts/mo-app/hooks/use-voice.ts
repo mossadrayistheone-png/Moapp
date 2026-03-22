@@ -310,6 +310,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
     // This prevents duplicate sends from rapid taps or timing edge cases.
     if (inflightRef.current) return;
 
+    // Hoisted so the catch block can check signal.aborted (React Native / Hermes
+    // throws "Network request failed" instead of "AbortError" when AbortController
+    // aborts a fetch — checking signal.aborted lets us correctly classify timeouts).
+    let fetchController: AbortController | null = null;
+
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
@@ -396,8 +401,8 @@ export function useVoice(options: UseVoiceOptions = {}) {
       // so the server always gets a chance to send a structured error before we abort.
       // Use manual AbortController instead of AbortSignal.timeout() which is not
       // supported in the Hermes engine bundled with this version of React Native.
-      const fetchController = new AbortController();
-      const fetchTimeoutId = setTimeout(() => fetchController.abort(), 28_000);
+      fetchController = new AbortController();
+      const fetchTimeoutId = setTimeout(() => fetchController!.abort(), 28_000);
       const response = await fetch(`${BASE_URL}/api/mo/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -533,7 +538,13 @@ export function useVoice(options: UseVoiceOptions = {}) {
       await sound.playAsync();
     } catch (err: any) {
       inflightRef.current = false;
-      const isTimeout = err?.name === "AbortError" || err?.name === "TimeoutError";
+      // React Native / Hermes throws "Network request failed" (not "AbortError")
+      // when AbortController.abort() cancels a pending fetch. Fall back to
+      // checking signal.aborted so we still surface the correct timeout message.
+      const isTimeout =
+        err?.name === "AbortError" ||
+        err?.name === "TimeoutError" ||
+        fetchController?.signal.aborted === true;
       const msg = isTimeout
         ? "Request timed out. Please try again."
         : (err?.message ?? "Something went wrong. Please try again.");
