@@ -66,6 +66,16 @@ function NotesIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
+function AlertCircleIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 8v4" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 16h.01" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MODES: { key: AssistantMode; label: string }[] = [
@@ -416,7 +426,7 @@ export default function HomeScreen() {
 
               {state === "error" && (
                 <View style={styles.errorCard}>
-                  <Feather name="alert-circle" size={18} color={Colors.gold} />
+                  <AlertCircleIcon size={18} color={Colors.gold} />
                   <Text style={styles.errorText} numberOfLines={3}>
                     {errorMessage || "Something went wrong. Please try again."}
                   </Text>
