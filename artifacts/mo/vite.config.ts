@@ -1,4 +1,5 @@
-import { defineConfig } from "vite";
+import fs from "fs";
+import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
@@ -26,9 +27,34 @@ if (!basePath) {
   );
 }
 
+// Plugin: serve .apk files from public/ with correct download headers
+function apkDownloadPlugin(): Plugin {
+  return {
+    name: "apk-download",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.endsWith(".apk")) {
+          const fileName = path.basename(req.url);
+          const filePath = path.resolve(import.meta.dirname, "public", fileName);
+          if (fs.existsSync(filePath)) {
+            const stat = fs.statSync(filePath);
+            res.setHeader("Content-Type", "application/vnd.android.package-archive");
+            res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+            res.setHeader("Content-Length", stat.size);
+            fs.createReadStream(filePath).pipe(res);
+            return;
+          }
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: basePath,
   plugins: [
+    apkDownloadPlugin(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
