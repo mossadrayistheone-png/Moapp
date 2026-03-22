@@ -509,8 +509,10 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!voiceId || !apiKey) throw new Error("ElevenLabs configuration missing.");
 
+  // optimize_streaming_latency=3 → max server-side latency reduction (no quality loss)
+  // output_format=mp3_22050_32 → smaller file, faster transfer, still clear voice quality
   const elevenRes = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?optimize_streaming_latency=3&output_format=mp3_22050_32`,
     {
       method: "POST",
       headers: {
@@ -525,7 +527,7 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
           stability: 0.72,
           similarity_boost: 0.78,
           style: 0.0,
-          use_speaker_boost: true,
+          use_speaker_boost: false,
         },
       }),
     }

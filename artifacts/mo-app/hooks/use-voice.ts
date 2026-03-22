@@ -110,17 +110,17 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
     extension: ".m4a",
     outputFormat: Audio.AndroidOutputFormat.MPEG_4,
     audioEncoder: Audio.AndroidAudioEncoder.AAC,
-    sampleRate: 44100,
+    sampleRate: 16000,
     numberOfChannels: 1,
-    bitRate: 128000,
+    bitRate: 32000,
   },
   ios: {
     extension: ".m4a",
     outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-    audioQuality: Audio.IOSAudioQuality.HIGH,
-    sampleRate: 44100,
+    audioQuality: Audio.IOSAudioQuality.MEDIUM,
+    sampleRate: 16000,
     numberOfChannels: 1,
-    bitRate: 128000,
+    bitRate: 32000,
     linearPCMBitDepth: 16,
     linearPCMIsBigEndian: false,
     linearPCMIsFloat: false,
@@ -135,7 +135,7 @@ const SPEECH_THRESHOLD_DB  = -35;  // above this = user is speaking
 const SILENCE_THRESHOLD_DB = -42;  // absolute quiet floor
 const PEAK_DROP_DB         = 14;   // drop from speech peak → counts as silence
                                    //   works even in loud/noisy environments
-const SILENCE_FRAMES       = 4;    // 4 × 200 ms = 0.8 s of sustained silence
+const SILENCE_FRAMES       = 3;    // 3 × 200 ms = 0.6 s of sustained silence
 const MAX_SPEECH_MS        = 8_000; // stop 8 s after first speech (noisy env fallback)
 const MAX_RECORD_MS        = 30_000; // hard cap if user never speaks
 
@@ -307,27 +307,28 @@ export function useVoice(options: UseVoiceOptions = {}) {
       const uri = recording.getURI();
       recordingRef.current = null;
 
-      if (Platform.OS !== "web") {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-        });
-      }
-
       if (!uri) {
         setStateSync("idle");
         return;
       }
 
+      // Show "Thinking..." immediately — don't wait for audio mode switch
       setStateSync("thinking");
 
-      // On web the URI is a blob: URL — use fetch + FileReader instead of expo-file-system
-      const audioBase64 =
+      // Switch audio mode and read file in parallel — saves ~100 ms
+      const [audioBase64] = await Promise.all([
         Platform.OS === "web"
-          ? await readBlobAsBase64(uri)
-          : await FileSystem.readAsStringAsync(uri, {
+          ? readBlobAsBase64(uri)
+          : FileSystem.readAsStringAsync(uri, {
               encoding: FileSystem.EncodingType.Base64,
-            });
+            }),
+        Platform.OS !== "web"
+          ? Audio.setAudioModeAsync({
+              allowsRecordingIOS: false,
+              playsInSilentModeIOS: true,
+            })
+          : Promise.resolve(),
+      ]);
 
       // Web records in WebM; native records in m4a — Whisper accepts both
       const audioFormat = Platform.OS === "web" ? "webm" : "m4a";
@@ -465,9 +466,6 @@ export function useVoice(options: UseVoiceOptions = {}) {
         setStateSync("idle");
         return;
       }
-
-      // Minimal buffer so the UI can update before audio starts
-      await new Promise<void>((resolve) => setTimeout(resolve, 80));
 
       if (soundRef.current) {
         await soundRef.current.unloadAsync();
