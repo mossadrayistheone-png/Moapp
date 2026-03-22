@@ -504,10 +504,16 @@ const TOKEN_MAP: Record<string, number> = {
   long: 220,
 };
 
-async function synthesizeSpeech(text: string): Promise<Buffer> {
+async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<Buffer> {
   const voiceId = process.env.ELEVENLABS_VOICE_ID;
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!voiceId || !apiKey) throw new Error("ElevenLabs configuration missing.");
+
+  // Hard 18s timeout on ElevenLabs — ensures we never block the full pipeline
+  const ttsTimeout = AbortSignal.timeout(18_000);
+  const combinedSignal = signal
+    ? AbortSignal.any([signal, ttsTimeout])
+    : ttsTimeout;
 
   // optimize_streaming_latency=3 → max server-side latency reduction (no quality loss)
   // output_format=mp3_22050_32 → smaller file, faster transfer, still clear voice quality
@@ -530,11 +536,12 @@ async function synthesizeSpeech(text: string): Promise<Buffer> {
           use_speaker_boost: false,
         },
       }),
+      signal: combinedSignal,
     }
   );
 
   if (!elevenRes.ok) {
-    const errText = await elevenRes.text();
+    const errText = await elevenRes.text().catch(() => "unknown");
     throw new Error(`ElevenLabs error ${elevenRes.status}: ${errText}`);
   }
 
@@ -743,16 +750,20 @@ function getQuickReply(toolName: string, args: Record<string, string>): string {
 async function runWithTools(
   systemPrompt: string,
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  maxTokens: number
+  maxTokens: number,
+  signal?: AbortSignal
 ): Promise<{ reply: string; toolResult: ToolCallResult | null }> {
-  const firstCompletion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "system", content: systemPrompt }, ...messages],
-    tools: TOOLS,
-    tool_choice: "auto",
-    max_tokens: maxTokens,
-    temperature: 0.6,
-  });
+  const firstCompletion = await openai.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
+      tools: TOOLS,
+      tool_choice: "auto",
+      max_tokens: maxTokens,
+      temperature: 0.6,
+    },
+    { signal, timeout: 12_000 }
+  );
 
   const firstChoice = firstCompletion.choices[0];
   const assistantMessage = firstChoice?.message;
@@ -835,17 +846,20 @@ async function runWithTools(
   }
 
   // ── Slow path: second GPT call for data-lookup tools (weather, search, time)
-  const secondCompletion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: systemPrompt },
-      ...messages,
-      assistantMessage,
-      { role: "tool", tool_call_id: toolCall.id, content: toolOutput },
-    ],
-    max_tokens: maxTokens,
-    temperature: 0.6,
-  });
+  const secondCompletion = await openai.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages,
+        assistantMessage,
+        { role: "tool", tool_call_id: toolCall.id, content: toolOutput },
+      ],
+      max_tokens: maxTokens,
+      temperature: 0.6,
+    },
+    { signal, timeout: 12_000 }
+  );
 
   const reply = secondCompletion.choices[0]?.message?.content?.trim() ?? "";
   return { reply, toolResult };
@@ -918,6 +932,13 @@ router.post("/mo/speak", async (req: Request, res: Response) => {
   }
 });
 
+// ── Pipeline timeout: 24 s hard deadline (Replit proxy kills at ~25 s) ───────
+const PIPELINE_TIMEOUT_MS = 24_000;
+
+function pipelineDeadline(): AbortSignal {
+  return AbortSignal.timeout(PIPELINE_TIMEOUT_MS);
+}
+
 router.post("/mo/voice", async (req: Request, res: Response) => {
   const parsed = MoVoiceBody.safeParse(req.body);
   if (!parsed.success) {
@@ -947,8 +968,14 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
   );
   const maxTokens = TOKEN_MAP[preferences?.responseLength ?? "medium"] ?? 120;
 
+  // One AbortSignal shared by the whole pipeline — cancelled if we reach 24 s.
+  // This prevents any hanging upstream call from blocking the proxy indefinitely.
+  const deadline = pipelineDeadline();
+  const t0 = Date.now();
+  const elapsed = () => Date.now() - t0;
+
   try {
-    // 1. Transcribe with Whisper
+    // ── Stage 1: Whisper transcription ─────────────────────────────────────
     const audioBuffer = Buffer.from(audio, "base64");
     const mimeMap: Record<string, string> = {
       m4a: "audio/m4a",
@@ -960,19 +987,34 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       type: mimeMap[format] ?? "audio/m4a",
     });
 
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: "whisper-1",
-      language: "en",
-    });
+    req.log.info({ stage: "whisper_start", ms: elapsed() }, "Voice pipeline");
 
-    const transcript = transcription.text.trim();
+    let transcript: string;
+    try {
+      const transcription = await openai.audio.transcriptions.create(
+        { file: audioFile, model: "whisper-1", language: "en" },
+        { signal: deadline, timeout: 15_000 }
+      );
+      transcript = transcription.text.trim();
+    } catch (err: any) {
+      const isTimeout = err?.name === "AbortError" || err?.name === "TimeoutError" || err?.code === "ECONNABORTED";
+      req.log.error({ err: err?.message, ms: elapsed() }, "Whisper failed");
+      if (isTimeout) {
+        res.status(504).json({ error: "Transcription timed out. Please try again." });
+      } else {
+        res.status(502).json({ error: "Could not transcribe audio. Please try again." });
+      }
+      return;
+    }
+
+    req.log.info({ stage: "whisper_done", ms: elapsed(), chars: transcript.length }, "Voice pipeline");
+
     if (!transcript) {
       res.json({ transcript: "", reply: "", audioBase64: "" });
       return;
     }
 
-    // 2. Conversation messages
+    // ── Stage 2: GPT-4o-mini reply ─────────────────────────────────────────
     const conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       ...(messages ?? []).slice(-10).map((m) => ({
         role: m.role as "user" | "assistant",
@@ -981,17 +1023,38 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       { role: "user" as const, content: transcript },
     ];
 
-    // 3. GPT reply with tool calling
-    const { reply, toolResult } = await runWithTools(systemPrompt, conversationMessages, maxTokens);
+    req.log.info({ stage: "gpt_start", ms: elapsed() }, "Voice pipeline");
+
+    let reply: string;
+    let toolResult: ToolCallResult | null;
+    try {
+      ({ reply, toolResult } = await runWithTools(systemPrompt, conversationMessages, maxTokens, deadline));
+    } catch (err: any) {
+      req.log.error({ err: err?.message, ms: elapsed() }, "GPT failed");
+      res.status(502).json({ error: "AI response failed. Please try again." });
+      return;
+    }
+
+    req.log.info({ stage: "gpt_done", ms: elapsed(), replyChars: reply.length }, "Voice pipeline");
 
     if (!reply) {
       res.json({ transcript, reply: "", audioBase64: "" });
       return;
     }
 
-    // 4. Synthesize speech
-    const audioResponseBuffer = await synthesizeSpeech(reply);
-    const audioBase64 = audioResponseBuffer.toString("base64");
+    // ── Stage 3: ElevenLabs TTS (graceful fallback — text always returned) ─
+    req.log.info({ stage: "tts_start", ms: elapsed() }, "Voice pipeline");
+
+    let audioBase64 = "";
+    try {
+      const audioResponseBuffer = await synthesizeSpeech(reply, deadline);
+      audioBase64 = audioResponseBuffer.toString("base64");
+      req.log.info({ stage: "tts_done", ms: elapsed(), bytes: audioResponseBuffer.byteLength }, "Voice pipeline");
+    } catch (err: any) {
+      // TTS failure is non-fatal — return the text reply without audio.
+      // The client shows the reply as text and skips playback.
+      req.log.warn({ err: err?.message, ms: elapsed() }, "TTS failed — returning text-only response");
+    }
 
     res.json({
       transcript,
@@ -1007,8 +1070,13 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       plan: toolResult?.plan,
     });
   } catch (err: any) {
-    req.log.error({ err }, "Voice pipeline error");
-    res.status(500).json({ error: err?.message ?? "Voice pipeline failed." });
+    const isTimeout = err?.name === "AbortError" || err?.name === "TimeoutError";
+    req.log.error({ err: err?.message, ms: elapsed() }, "Voice pipeline uncaught error");
+    if (isTimeout) {
+      res.status(504).json({ error: "Request timed out. Please try again." });
+    } else {
+      res.status(500).json({ error: err?.message ?? "Voice pipeline failed." });
+    }
   }
 });
 

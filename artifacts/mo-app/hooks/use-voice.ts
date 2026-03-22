@@ -172,6 +172,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const stateRef = useRef<AssistantState>("idle");
 
+  // Inflight guard — prevents duplicate requests if user taps while a request
+  // is already in progress (e.g., after a 502 that left the app in an odd state)
+  const inflightRef = useRef(false);
+
   // Silence-detection timers
   const silenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -302,6 +306,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
     const recording = recordingRef.current;
     if (!recording) return;
 
+    // Inflight guard — if a request is already in progress, don't fire another.
+    // This prevents duplicate sends from rapid taps or timing edge cases.
+    if (inflightRef.current) return;
+
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
@@ -314,6 +322,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       // Show "Thinking..." immediately — don't wait for audio mode switch
       setStateSync("thinking");
+      inflightRef.current = true;
 
       // Switch audio mode and read file in parallel — saves ~100 ms
       const [audioBase64] = await Promise.all([
@@ -383,9 +392,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
         timestamp: n.timestamp,
       }));
 
+      // 28 s client-side timeout — slightly longer than the server's 24 s deadline
+      // so the server always gets a chance to send a structured error before we abort.
       const response = await fetch(`${BASE_URL}/api/mo/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(28_000),
         body: JSON.stringify({
           audio: audioBase64,
           format: audioFormat,
@@ -408,7 +420,17 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error((body as any)?.error ?? `Server error ${response.status}`);
+        // Classify the error for a user-friendly message
+        const serverMsg = (body as any)?.error;
+        let friendlyMsg: string;
+        if (response.status === 502 || response.status === 503) {
+          friendlyMsg = serverMsg ?? "Service temporarily unavailable. Please try again.";
+        } else if (response.status === 504) {
+          friendlyMsg = serverMsg ?? "Request timed out. Please try again.";
+        } else {
+          friendlyMsg = serverMsg ?? `Something went wrong (${response.status}). Please try again.`;
+        }
+        throw new Error(friendlyMsg);
       }
 
       const data = (await response.json()) as {
@@ -429,6 +451,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       if (!tx?.trim() || !rp) {
         setStateSync("idle");
+        inflightRef.current = false;
         return;
       }
 
@@ -461,9 +484,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
       // Notify parent of completed turn
       callbacks?.onTurnComplete?.(tx, rp);
 
-      // Play audio if autoplay and audio provided
+      // If TTS failed on the server, audioBase64 will be empty.
+      // The text reply is already shown — skip playback gracefully.
       if (!autoplay || !audiob64) {
         setStateSync("idle");
+        inflightRef.current = false;
         return;
       }
 
@@ -472,13 +497,14 @@ export function useVoice(options: UseVoiceOptions = {}) {
         soundRef.current = null;
       }
 
-      // On web: play directly from a data URI — no file system write needed
-      // On native: write to cache first (expo-av requires a file URI on native)
+      // On web: play directly from a data URI — no file system write needed.
+      // On native: write to a timestamped cache path to avoid collision with
+      // any previously-playing audio that may still be reading the old file.
       let audioUri: string;
       if (Platform.OS === "web") {
         audioUri = `data:audio/mpeg;base64,${audiob64}`;
       } else {
-        const audioPath = `${FileSystem.cacheDirectory}mo-reply.mp3`;
+        const audioPath = `${FileSystem.cacheDirectory}mo-reply-${Date.now()}.mp3`;
         await FileSystem.writeAsStringAsync(audioPath, audiob64, {
           encoding: FileSystem.EncodingType.Base64,
         });
@@ -494,6 +520,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       sound.setOnPlaybackStatusUpdate((status) => {
         if ("didJustFinish" in status && status.didJustFinish) {
           setStateSync("idle");
+          inflightRef.current = false;
           sound.unloadAsync();
         }
       });
@@ -501,12 +528,17 @@ export function useVoice(options: UseVoiceOptions = {}) {
       setStateSync("speaking");
       await sound.playAsync();
     } catch (err: any) {
+      inflightRef.current = false;
+      const isTimeout = err?.name === "AbortError" || err?.name === "TimeoutError";
+      const msg = isTimeout
+        ? "Request timed out. Please try again."
+        : (err?.message ?? "Something went wrong. Please try again.");
       console.error("Voice pipeline error:", err);
-      setErrorMessage(err?.message ?? "Something went wrong.");
+      setErrorMessage(msg);
       setStateSync("error");
-      setTimeout(() => setStateSync("idle"), 3000);
+      setTimeout(() => setStateSync("idle"), 4000);
     }
-  }, [mode, conversationHistory, memories, tasks, reminders, preferences, autoplay, callbacks]);
+  }, [mode, conversationHistory, memories, tasks, reminders, notes, preferences, autoplay, callbacks]);
 
   // Keep the ref current so startRecording's interval always calls the
   // latest version of stopAndProcess (avoids stale-closure issues).
@@ -519,6 +551,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       await soundRef.current.stopAsync();
       soundRef.current = null;
     }
+    inflightRef.current = false;
     setStateSync("idle");
   }, []);
 
