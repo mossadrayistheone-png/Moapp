@@ -27,15 +27,15 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ### `artifacts/mo-app` (`@workspace/mo-app`) — Mo: AI Voice Assistant (Native)
 - Expo React Native app, scanned via Expo Go QR code
-- **APK v9** (versionCode 9) built via EAS on 2026-03-23; EAS Build ID: `51b5ed68-748e-4804-8ed7-e1cdc767a86b`
-  - Builder image: `ubuntu-24.04-jdk-17-ndk-r27b` (JDK 17 required by Gradle 8.14.3 + AGP 8.x)
-  - APK file: `/home/runner/workspace/mo-app-v9.apk` (94 MB)
-  - Download symlinks: `artifacts/mo/public/mo-app-v9.apk` and `artifacts/api-server/public/mo-app-v9.apk`
+- **APK v10** (versionCode 10) built via EAS on 2026-03-23; EAS Build ID: `38efb870-ca74-4b37-ba02-a06caec4a9a3`
+  - Builder image: `ubuntu-24.04-jdk-17-ndk-r27b`
+  - APK file: `/home/runner/workspace/mo-app-v10.apk` (97 MB)
+  - Download symlinks: `artifacts/mo/public/mo-app-v10.apk` and `artifacts/api-server/public/mo-app-v10.apk`
   - EAS project ID: `1c83b5bc-7a55-49ff-91e4-9a6c5c1984be`, slug: `moexec`
-  - Fix: Hardcoded `EXPO_PUBLIC_DOMAIN` fallback in `app/(tabs)/index.tsx` so background video URL is always valid
-  - Keystore: debug keystore (`androiddebugkey`, password `android`) — used for both debug and release builds per build.gradle
-- **APK v8** (versionCode 8) built via EAS on 2026-03-22; EAS Build ID: `95a5feb4-2a2d-49d3-ab27-ba4ffab7fc83`
-  - APK file: `/home/runner/workspace/mo-app-v8.apk` (94 MB) — broken video (EXPO_PUBLIC_DOMAIN not baked in)
+  - **Bundled video**: `assets/videos/background.mp4` — 30s H.264 clip at 540×960, ~800 kbps, 3.2 MB; no download required at runtime
+  - Keystore: debug keystore (`androiddebugkey`, password `android`)
+- **APK v9** (versionCode 9) — remote video URL fix; superseded by v10
+- **APK v8** (versionCode 8) — broken video build; superseded
 - Full voice pipeline: expo-av recording → base64 → Whisper transcription → GPT-4o-mini → ElevenLabs TTS → base64 MP3 → expo-av playback
 - Four personality modes: Executive, Creative, Motivational, Planner
 - Conversation continuity: last 10 turns sent with every request

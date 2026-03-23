@@ -1,5 +1,4 @@
 import { ResizeMode, Video } from "expo-av";
-import * as FileSystem from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -86,12 +85,9 @@ const MODES: { key: AssistantMode; label: string }[] = [
   { key: "planner", label: "Planner" },
 ];
 
-// Domain is baked in at build time via EXPO_PUBLIC_DOMAIN env var.
-// The fallback ensures video works even if the var wasn't injected at build time.
-const DOMAIN =
-  process.env.EXPO_PUBLIC_DOMAIN ||
-  "4f6fb0d5-3605-432b-b4cf-752ffaa27876-00-23fkcbo0ta0v8.spock.replit.dev";
-const VIDEO_URL = `https://${DOMAIN}/background.mp4`;
+// Background video is bundled into the APK as a local asset.
+// No network download required — Metro packages the .mp4 alongside the JS bundle.
+const BG_VIDEO = require("@/assets/videos/background.mp4");
 
 // ── Status label with animated dots ──────────────────────────────────────────
 
@@ -156,40 +152,9 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [activePlan, setActivePlan] = useState<DayPlan | null>(null);
 
-  // ── Video: download once and play from local cache ────────────────────────
-  // Streaming a 134 MB video from a remote URL is unreliable over mobile.
-  // We download it on first launch, cache it, and play locally.
-  // A cached file smaller than 10 MB is treated as corrupt and re-downloaded.
-  const MIN_VIDEO_BYTES = 10 * 1024 * 1024; // 10 MB sanity threshold
-  const [videoUri, setVideoUri] = useState<string | null>(null);
-  const localVideoPath = `${FileSystem.cacheDirectory}mo-background.mp4`;
-
-  useEffect(() => {
-    let cancelled = false;
-    async function prepareVideo() {
-      try {
-        const info = await FileSystem.getInfoAsync(localVideoPath, { size: true });
-        const cached = info.exists && (info as any).size > MIN_VIDEO_BYTES;
-        if (cached) {
-          if (!cancelled) setVideoUri(localVideoPath);
-          return;
-        }
-        // Remove any stale / partial file before downloading fresh
-        if (info.exists) {
-          await FileSystem.deleteAsync(localVideoPath, { idempotent: true });
-        }
-        // Download from server into the cache directory
-        const dl = FileSystem.createDownloadResumable(VIDEO_URL, localVideoPath, {});
-        const result = await dl.downloadAsync();
-        if (!cancelled && result?.uri) setVideoUri(result.uri);
-      } catch {
-        // Download failed — stream directly from the server as a last resort
-        if (!cancelled) setVideoUri(VIDEO_URL);
-      }
-    }
-    prepareVideo();
-    return () => { cancelled = true; };
-  }, []);
+  // ── Video: bundled local asset — no network required ─────────────────────
+  // background.mp4 is packaged inside the APK at build time via Metro.
+  // BG_VIDEO is a require() reference resolved at bundle time.
   // ─────────────────────────────────────────────────────────────────────────
 
   const {
@@ -331,11 +296,11 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Background video — plays from local cache (downloaded on first launch) */}
-      {preferences.backgroundEnabled && videoUri && (
+      {/* Background video — bundled asset, plays instantly with no download */}
+      {preferences.backgroundEnabled && (
         <Video
           ref={videoRef}
-          source={{ uri: videoUri }}
+          source={BG_VIDEO}
           style={StyleSheet.absoluteFillObject}
           resizeMode={ResizeMode.COVER}
           isLooping
