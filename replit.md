@@ -27,11 +27,15 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ### `artifacts/mo-app` (`@workspace/mo-app`) — Mo: AI Voice Assistant (Native)
 - Expo React Native app, scanned via Expo Go QR code
-- **APK v8** (versionCode 8) built via EAS on 2026-03-22; EAS Build ID: `95a5feb4-2a2d-49d3-ab27-ba4ffab7fc83`
+- **APK v9** (versionCode 9) built via EAS on 2026-03-23; EAS Build ID: `51b5ed68-748e-4804-8ed7-e1cdc767a86b`
   - Builder image: `ubuntu-24.04-jdk-17-ndk-r27b` (JDK 17 required by Gradle 8.14.3 + AGP 8.x)
-  - APK file: `/home/runner/workspace/mo-app-v8.apk` (94 MB)
-  - Download symlink: `artifacts/mo/public/mo-app-v8.apk` → served at `/mo-app-v8.apk` by vite apkDownloadPlugin
+  - APK file: `/home/runner/workspace/mo-app-v9.apk` (94 MB)
+  - Download symlinks: `artifacts/mo/public/mo-app-v9.apk` and `artifacts/api-server/public/mo-app-v9.apk`
   - EAS project ID: `1c83b5bc-7a55-49ff-91e4-9a6c5c1984be`, slug: `moexec`
+  - Fix: Hardcoded `EXPO_PUBLIC_DOMAIN` fallback in `app/(tabs)/index.tsx` so background video URL is always valid
+  - Keystore: debug keystore (`androiddebugkey`, password `android`) — used for both debug and release builds per build.gradle
+- **APK v8** (versionCode 8) built via EAS on 2026-03-22; EAS Build ID: `95a5feb4-2a2d-49d3-ab27-ba4ffab7fc83`
+  - APK file: `/home/runner/workspace/mo-app-v8.apk` (94 MB) — broken video (EXPO_PUBLIC_DOMAIN not baked in)
 - Full voice pipeline: expo-av recording → base64 → Whisper transcription → GPT-4o-mini → ElevenLabs TTS → base64 MP3 → expo-av playback
 - Four personality modes: Executive, Creative, Motivational, Planner
 - Conversation continuity: last 10 turns sent with every request
