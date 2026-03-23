@@ -27,6 +27,12 @@ if (!basePath) {
   );
 }
 
+// Directories that may contain .apk files (checked in order)
+const APK_DIRS = [
+  path.resolve(import.meta.dirname, "public"),
+  path.resolve(import.meta.dirname, "..", "api-server", "public"),
+];
+
 // Plugin: serve .apk files from public/ with correct download headers
 function apkDownloadPlugin(): Plugin {
   return {
@@ -35,14 +41,16 @@ function apkDownloadPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         if (req.url?.endsWith(".apk")) {
           const fileName = path.basename(req.url);
-          const filePath = path.resolve(import.meta.dirname, "public", fileName);
-          if (fs.existsSync(filePath)) {
-            const stat = fs.statSync(filePath);
-            res.setHeader("Content-Type", "application/vnd.android.package-archive");
-            res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-            res.setHeader("Content-Length", stat.size);
-            fs.createReadStream(filePath).pipe(res);
-            return;
+          for (const dir of APK_DIRS) {
+            const filePath = path.resolve(dir, fileName);
+            if (fs.existsSync(filePath)) {
+              const stat = fs.statSync(filePath);
+              res.setHeader("Content-Type", "application/vnd.android.package-archive");
+              res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+              res.setHeader("Content-Length", stat.size);
+              fs.createReadStream(filePath).pipe(res);
+              return;
+            }
           }
         }
         next();
