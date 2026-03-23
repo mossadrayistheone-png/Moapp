@@ -6,3 +6,7 @@ mo-app-v7.apk filter=lfs diff=lfs merge=lfs -text
 mo-app-v8.apk filter=lfs diff=lfs merge=lfs -text
 mo-app-v9.apk filter=lfs diff=lfs merge=lfs -text
 mo-app-v10.apk filter=lfs diff=lfs merge=lfs -text
+artifacts/api-server/public/mo-app-v11.apk filter=lfs diff=lfs merge=lfs -text
+artifacts/mo-app/assets/videos/background.mp4 filter=lfs diff=lfs merge=lfs -text
+artifacts/mo/public/mo-app-v11.apk filter=lfs diff=lfs merge=lfs -text
+mo-app-v11.apk filter=lfs diff=lfs merge=lfs -text

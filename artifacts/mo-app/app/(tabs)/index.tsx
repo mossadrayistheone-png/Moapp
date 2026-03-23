@@ -296,7 +296,9 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Background video — bundled asset, plays instantly with no download */}
+      {/* Background video — bundled asset, plays instantly with no download.
+          onLoad fires once when the media is ready; we immediately seek to a
+          random point in the 9-minute video so every app-open feels different. */}
       {preferences.backgroundEnabled && (
         <Video
           ref={videoRef}
@@ -306,6 +308,18 @@ export default function HomeScreen() {
           isLooping
           isMuted
           shouldPlay
+          onLoad={(status) => {
+            if (
+              status.isLoaded &&
+              status.durationMillis &&
+              status.durationMillis > 0 &&
+              videoRef.current
+            ) {
+              // Pick a random start point anywhere in the full video
+              const randomMs = Math.floor(Math.random() * status.durationMillis);
+              videoRef.current.setPositionAsync(randomMs);
+            }
+          }}
         />
       )}
 
