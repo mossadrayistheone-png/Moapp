@@ -10,3 +10,4 @@ artifacts/api-server/public/mo-app-v11.apk filter=lfs diff=lfs merge=lfs -text
 artifacts/mo-app/assets/videos/background.mp4 filter=lfs diff=lfs merge=lfs -text
 artifacts/mo/public/mo-app-v11.apk filter=lfs diff=lfs merge=lfs -text
 mo-app-v11.apk filter=lfs diff=lfs merge=lfs -text
+artifacts/api-server/public/mo-app-v12.apk filter=lfs diff=lfs merge=lfs -text

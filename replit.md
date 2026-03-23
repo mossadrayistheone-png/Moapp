@@ -27,16 +27,15 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ### `artifacts/mo-app` (`@workspace/mo-app`) — Mo: AI Voice Assistant (Native)
 - Expo React Native app, scanned via Expo Go QR code
-- **APK v10** (versionCode 10) built via EAS on 2026-03-23; EAS Build ID: `38efb870-ca74-4b37-ba02-a06caec4a9a3`
-  - Builder image: `ubuntu-24.04-jdk-17-ndk-r27b`
-  - APK file: `/home/runner/workspace/mo-app-v10.apk` (97 MB)
-  - Download symlinks: `artifacts/mo/public/mo-app-v10.apk` and `artifacts/api-server/public/mo-app-v10.apk`
+- **APK v12** (versionCode 12) — Realtime voice pipeline (OpenAI Realtime API); EAS Build ID: `87d52ffb-a24e-4780-838f-4001affac57d`
+  - APK file: `artifacts/api-server/public/mo-app-v12.apk` (auto-downloaded when EAS build finishes)
+  - Bundled 129 MB background video, same as v11
+- **APK v11** (versionCode 11) — restored 129 MB cinematic video, random start position; EAS Build ID: `af4392ce-f2fe-4e95-bc79-7472d80e1ba0`
+  - APK file: `artifacts/api-server/public/mo-app-v11.apk` (222 MB)
   - EAS project ID: `1c83b5bc-7a55-49ff-91e4-9a6c5c1984be`, slug: `moexec`
-  - **Bundled video**: `assets/videos/background.mp4` — 30s H.264 clip at 540×960, ~800 kbps, 3.2 MB; no download required at runtime
   - Keystore: debug keystore (`androiddebugkey`, password `android`)
-- **APK v9** (versionCode 9) — remote video URL fix; superseded by v10
-- **APK v8** (versionCode 8) — broken video build; superseded
-- Full voice pipeline: expo-av recording → base64 → Whisper transcription → GPT-4o-mini → ElevenLabs TTS → base64 MP3 → expo-av playback
+- **Voice pipeline (v12+)**: Realtime WebSocket (`/api/mo/realtime`) → expo-av M4A recording → base64 JSON via WebSocket → server: ffmpeg M4A→PCM16 24kHz → OpenAI Realtime API (`gpt-4o-realtime-preview-2024-12-17`, `shimmer` voice) → PCM16→WAV → base64 WAV to mobile → expo-av playback. Falls back to classic HTTP pipeline (`useVoice`) if WebSocket unavailable.
+- **Voice pipeline (v11, fallback)**: expo-av recording → base64 → Whisper transcription → GPT-4o-mini → ElevenLabs TTS → base64 MP3 → expo-av playback
 - Four personality modes: Executive, Creative, Motivational, Planner
 - Conversation continuity: last 10 turns sent with every request
 - Notes: full CRUD via voice — save with optional title + category pill, delete by keyword; notes injected into system prompt for context; NoteCard shows title, color-coded category pill, mic/pen source icon
@@ -49,15 +48,18 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   - `app/settings.tsx` — settings screen
   - `app/notes.tsx` — notes + reminders screen
   - `context/AppContext.tsx` — preferences + conversation history
-  - `hooks/use-voice.ts` — voice pipeline hook
+  - `hooks/use-realtime-voice.ts` — **new** realtime WebSocket voice hook (default, falls back to use-voice)
+  - `hooks/use-voice.ts` — classic HTTP voice pipeline hook (fallback)
   - `hooks/use-notes.ts` — notes management
   - `hooks/use-reminders.ts` — reminders + expo-notifications
 
 ### API Routes (in `artifacts/api-server`)
 - `POST /api/mo/chat` — text chat with conversation history support, function calling
 - `POST /api/mo/speak` — TTS via ElevenLabs, returns audio/mpeg
-- `POST /api/mo/voice` — full pipeline: base64 audio → Whisper → GPT+tools → ElevenLabs → JSON response
-- Route file: `artifacts/api-server/src/routes/mo.ts`
+- `POST /api/mo/voice` — classic pipeline: base64 audio → Whisper → GPT+tools → ElevenLabs → JSON response
+- `WS  /api/mo/realtime` — **new** realtime pipeline: WebSocket; receives `{type:"voice", audio:base64m4a, ...context}`, responds with `{type:"audio", data:base64wav}` + tool result events; proxies to OpenAI Realtime API (`gpt-4o-realtime-preview-2024-12-17`, voice `shimmer`)
+- Route files: `artifacts/api-server/src/routes/mo.ts`, `artifacts/api-server/src/routes/realtime.ts`
+- Server: `artifacts/api-server/src/index.ts` — creates `http.Server` + `WebSocketServer` (ws package) on same port
 - Services:
   - `src/services/weather.ts` — weather via wttr.in (no API key)
   - `src/services/search.ts` — web search via Serper.dev (SERPER_API_KEY) or DuckDuckGo (free fallback)

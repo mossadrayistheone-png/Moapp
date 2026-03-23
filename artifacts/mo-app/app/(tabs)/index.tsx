@@ -20,7 +20,7 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
-import { useVoice, type AssistantMode, type DayPlan, type MemoryActionPayload, type NoteActionPayload, type NotePayload, type ReminderActionPayload, type TaskActionPayload } from "@/hooks/use-voice";
+import { useRealtimeVoice as useVoice, type AssistantMode, type DayPlan, type MemoryActionPayload, type NoteActionPayload, type NotePayload, type ReminderActionPayload, type TaskActionPayload } from "@/hooks/use-realtime-voice";
 
 // ── Header SVG icons (no icon fonts — font loading is unreliable in Expo Go) ──
 
