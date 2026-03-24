@@ -7,6 +7,7 @@ import { WebSocket as WsClient, type WebSocket as WsSocket } from "ws";
 import type { IncomingMessage } from "http";
 import { getWeather } from "../services/weather.js";
 import { webSearch } from "../services/search.js";
+import { logger as rootLogger } from "../lib/logger.js";
 
 const execAsync = promisify(exec);
 
@@ -71,11 +72,11 @@ function pcm16ToWav(pcm16: Buffer, sampleRate = 24_000, channels = 1): Buffer {
 
 const SHARED_RULES = `
 Rules that never change:
-- 1 to 2 sentences only. Never more. Brevity is a form of respect.
+- You are speaking out loud. One sentence. Two at absolute maximum.
 - Never use filler: no "Of course", "Certainly", "Great question", "Sure", "Absolutely".
 - Never start with "I". Lead with the insight.
-- No lists. No bullet points. No markdown. Pure prose.
-- When you receive search or weather results, use them naturally.
+- No lists, no markdown, no hedging. Pure spoken prose.
+- When you receive search or weather results, use them naturally in your reply.
 - Never say you lack access to information. Engage with substance.
 - When estimating, do so with conviction.`;
 
@@ -226,6 +227,10 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
     return;
   }
 
+  const connId = `rt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const log    = rootLogger.child({ connId });
+  log.info("Realtime WS connection opened");
+
   let openaiWs: WsClient | null      = null;
   let sessionReady                   = false;
   let sessionConfig: SessionConfig   = {};
@@ -280,8 +285,8 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
         turn_detection:            null,
         tools:                     REALTIME_TOOLS,
         tool_choice:               "auto",
-        temperature:               0.8,
-        max_response_output_tokens: 256,
+        temperature:               0.7,
+        max_response_output_tokens: 150,
       },
     });
   };
@@ -344,6 +349,7 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
         case "response.audio.done": {
           if (pcm16Chunks.length > 0) {
             const wav = pcm16ToWav(Buffer.concat(pcm16Chunks));
+            log.info({ stage: "audio_sent_to_client", wavBytes: wav.byteLength }, "Voice turn");
             sendToClient({ type: "audio", data: wav.toString("base64"), mimeType: "audio/wav" });
           }
           break;
@@ -381,6 +387,7 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
             let args: Record<string, string> = {};
             try { args = JSON.parse(argsAcc); } catch { /* use empty */ }
 
+            log.info({ stage: "tool_call", tool: name, args }, "Voice turn");
             const toolOutput     = await executeTool(name, args);
             const clientPayload  = buildClientPayload(name, args);
             sendToClient({ type: "tool_result", ...clientPayload });
@@ -413,6 +420,7 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
 
         case "error": {
           const msg = ((event as any).error as { message?: string } | undefined)?.message ?? "OpenAI Realtime error";
+          log.warn({ stage: "openai_error", msg }, "Voice turn");
           abortTurn(msg);
           break;
         }
@@ -455,9 +463,13 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
     const rawBuffer    = Buffer.concat(audioChunks);
     audioChunks.length = 0;
 
+    log.info({ stage: "ffmpeg_start", inputBytes: rawBuffer.byteLength, ext }, "Voice turn");
+
     try {
+      const t0       = Date.now();
       const pcm16    = await audioToPcm16(rawBuffer, ext);
       const pcm16b64 = pcm16.toString("base64");
+      log.info({ stage: "ffmpeg_done", pcmBytes: pcm16.byteLength, ms: Date.now() - t0 }, "Voice turn");
 
       resetTurnState();
 
@@ -471,9 +483,11 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
       sendToOpenAI({ type: "input_audio_buffer.append", audio: pcm16b64 });
       sendToOpenAI({ type: "input_audio_buffer.commit" });
       sendToOpenAI({ type: "response.create", response: { modalities: ["text", "audio"] } });
+      log.info({ stage: "openai_submitted" }, "Voice turn");
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Audio processing failed.";
+      log.warn({ stage: "ffmpeg_error", err: msg }, "Voice turn");
       abortTurn(msg);
     }
   };
@@ -580,6 +594,7 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
   });
 
   clientWs.on("close", () => {
+    log.info("Realtime WS connection closed");
     openaiWs?.close();
     openaiWs = null;
   });

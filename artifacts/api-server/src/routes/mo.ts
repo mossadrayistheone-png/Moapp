@@ -800,7 +800,12 @@ async function runWithTools(
     return { reply: assistantMessage?.content?.trim() ?? "", toolResult: null };
   }
 
-  const toolCall = assistantMessage.tool_calls[0];
+  // Narrow to the standard function tool call shape.
+  const toolCall = assistantMessage.tool_calls[0] as {
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  };
   const toolName = toolCall.function.name;
   let toolArgs: Record<string, string> = {};
   try {
@@ -1012,7 +1017,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     const { buffer: audioBuffer, filename } = await normaliseAudio(rawBuffer, format);
     req.log.info({ stage: "ffmpeg_done", ms: elapsed(), outputBytes: audioBuffer.byteLength, filename }, "Voice pipeline");
 
-    const audioFile = new File([audioBuffer], filename, { type: "audio/wav" });
+    const audioFile = new File([new Uint8Array(audioBuffer)], filename, { type: "audio/wav" });
 
     req.log.info({ stage: "whisper_start", ms: elapsed() }, "Voice pipeline");
 

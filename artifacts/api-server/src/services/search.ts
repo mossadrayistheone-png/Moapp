@@ -43,7 +43,7 @@ async function searchSerper(query: string): Promise<string> {
 
   if (!res.ok) throw new Error(`Serper error ${res.status}`);
 
-  const data: SerperResponse = await res.json();
+  const data = await res.json() as SerperResponse;
   const parts: string[] = [];
 
   if (data.answerBox?.answer) {
@@ -78,7 +78,7 @@ async function searchDuckDuckGo(query: string): Promise<string> {
 
   if (!res.ok) throw new Error(`DDG error ${res.status}`);
 
-  const data: DdgResponse = await res.json();
+  const data = await res.json() as DdgResponse;
   const parts: string[] = [];
 
   if (data.Answer) parts.push(data.Answer);

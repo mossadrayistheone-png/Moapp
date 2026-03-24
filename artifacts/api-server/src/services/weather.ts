@@ -50,7 +50,7 @@ export async function getWeather(location: string): Promise<string> {
       return `I couldn't retrieve weather data for ${location} right now.`;
     }
 
-    const data: WttrResponse = await res.json();
+    const data = await res.json() as WttrResponse;
     const current = data.current_condition?.[0];
     const area = data.nearest_area?.[0];
 
