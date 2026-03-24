@@ -1,0 +1,5 @@
+*.apk
+*.aab
+artifacts/mo/public/
+artifacts/api-server/public/
+node_modules/
