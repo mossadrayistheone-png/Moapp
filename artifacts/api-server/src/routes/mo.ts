@@ -1193,6 +1193,16 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       memoryAction: toolResult?.memoryAction,
       taskAction: toolResult?.taskAction,
       plan: toolResult?.plan,
+      // Per-stage timing in milliseconds — used by the latency benchmark.
+      // Clients may ignore this field; it does not affect app behaviour.
+      timings: {
+        ffmpegMs:  stageMs.ffmpeg  ?? null,
+        whisperMs: stageMs.whisper ?? null,
+        gptMs:     stageMs.gpt     ?? null,
+        ttsMs:     stageMs.openaiTts ?? null,
+        stsMs:     stageMs.elevenSts ?? null,
+        totalMs:   elapsed(),
+      },
     });
   } catch (err: any) {
     const isTimeout = err?.name === "AbortError" || err?.name === "TimeoutError";
