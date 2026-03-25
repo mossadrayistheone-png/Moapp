@@ -24,6 +24,24 @@ async function readBlobAsBase64(uri: string): Promise<string> {
   });
 }
 
+// ── Filler phrase assets ──────────────────────────────────────────────────────
+// Pre-generated MP3s recorded in Mo's voice via the STS pipeline.
+// Played immediately after the user stops speaking so the ~7 s processing gap
+// is not silent. Assets must be listed with static require() for Metro bundling.
+
+const FILLER_ASSETS = [
+  require("../assets/fillers/filler-01.mp3"),
+  require("../assets/fillers/filler-02.mp3"),
+  require("../assets/fillers/filler-03.mp3"),
+  require("../assets/fillers/filler-04.mp3"),
+  require("../assets/fillers/filler-05.mp3"),
+  require("../assets/fillers/filler-06.mp3"),
+  require("../assets/fillers/filler-07.mp3"),
+  require("../assets/fillers/filler-08.mp3"),
+  require("../assets/fillers/filler-09.mp3"),
+  require("../assets/fillers/filler-10.mp3"),
+];
+
 export type AssistantState =
   | "idle"
   | "listening"
@@ -168,16 +186,17 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const [reply, setReply] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const stateRef = useRef<AssistantState>("idle");
+  const recordingRef    = useRef<Audio.Recording | null>(null);
+  const soundRef        = useRef<Audio.Sound | null>(null);      // real answer audio
+  const fillerSoundRef  = useRef<Audio.Sound | null>(null);      // filler audio
+  const stateRef        = useRef<AssistantState>("idle");
 
   // Inflight guard — prevents duplicate requests if user taps while a request
   // is already in progress (e.g., after a 502 that left the app in an odd state)
   const inflightRef = useRef(false);
 
   // Silence-detection timers
-  const silenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const silenceIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ref to stopAndProcess so startRecording can call it without a circular dep
@@ -299,6 +318,46 @@ export function useVoice(options: UseVoiceOptions = {}) {
     }
   }, []);
 
+  // ── Filler playback ─────────────────────────────────────────────────────────
+  // Picks a random pre-generated filler phrase and plays it in Mo's voice.
+  // Returns a Promise that resolves when the filler finishes — or immediately
+  // if it cannot be loaded — so it can be raced/combined with the API call.
+  //
+  // Transition contract:
+  //   • Sets state → "speaking" as soon as audio starts.
+  //   • Resolves the Promise when the audio finishes (or fails).
+  //   • The caller (stopAndProcess) uses Promise.all([fillerPromise, apiPromise])
+  //     so the real answer ONLY plays after BOTH the filler finishes AND the
+  //     API response is ready — guaranteeing zero overlap, zero race conditions.
+  //
+  const playFillerAsync = useCallback((): Promise<void> => {
+    const idx = Math.floor(Math.random() * FILLER_ASSETS.length);
+
+    return new Promise<void>((resolve) => {
+      Audio.Sound.createAsync(FILLER_ASSETS[idx], { shouldPlay: false })
+        .then(({ sound }) => {
+          fillerSoundRef.current = sound;
+
+          sound.setOnPlaybackStatusUpdate((status) => {
+            if ("didJustFinish" in status && status.didJustFinish) {
+              fillerSoundRef.current = null;
+              sound.unloadAsync().catch(() => {});
+              resolve();
+            }
+          });
+
+          setStateSync("speaking");
+          return sound.playAsync();
+        })
+        .catch(() => {
+          // Filler failed to load or play — resolve immediately so the real
+          // answer is never blocked by a filler audio error.
+          fillerSoundRef.current = null;
+          resolve();
+        });
+    });
+  }, []);
+
   const stopAndProcess = useCallback(async () => {
     // Cancel any running silence / max-duration timers
     clearRecordingTimers();
@@ -329,7 +388,20 @@ export function useVoice(options: UseVoiceOptions = {}) {
       setStateSync("thinking");
       inflightRef.current = true;
 
-      // Switch audio mode and read file in parallel — saves ~100 ms
+      // Unload any previously playing audio (filler or answer from a prior turn)
+      if (fillerSoundRef.current) {
+        await fillerSoundRef.current.stopAsync().catch(() => {});
+        await fillerSoundRef.current.unloadAsync().catch(() => {});
+        fillerSoundRef.current = null;
+      }
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+
+      // Switch audio mode and read file in parallel — saves ~100 ms.
+      // Audio mode must switch to playback BEFORE any sound is played (filler
+      // or answer), which is why this step must complete before playFillerAsync.
       const [audioBase64] = await Promise.all([
         Platform.OS === "web"
           ? readBlobAsBase64(uri)
@@ -397,13 +469,15 @@ export function useVoice(options: UseVoiceOptions = {}) {
         timestamp: n.timestamp,
       }));
 
-      // 28 s client-side timeout — slightly longer than the server's 24 s deadline
-      // so the server always gets a chance to send a structured error before we abort.
-      // Use manual AbortController instead of AbortSignal.timeout() which is not
-      // supported in the Hermes engine bundled with this version of React Native.
       fetchController = new AbortController();
       const fetchTimeoutId = setTimeout(() => fetchController!.abort(), 28_000);
-      const response = await fetch(`${BASE_URL}/api/mo/voice`, {
+
+      // ── API fetch (runs as a Promise — does NOT block filler playback) ────
+      // Immediately starts the network request. Returns the audio URI (string)
+      // when ready, or null if the server returned text-only (STS failed).
+      // Side effects (tool callbacks, transcript, reply) are fired here too,
+      // so the UI updates as soon as the API responds regardless of filler state.
+      const apiPromise: Promise<string | null> = fetch(`${BASE_URL}/api/mo/voice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: fetchController.signal,
@@ -425,103 +499,100 @@ export function useVoice(options: UseVoiceOptions = {}) {
               }
             : undefined,
         }),
-      }).finally(() => clearTimeout(fetchTimeoutId));
+      })
+        .finally(() => clearTimeout(fetchTimeoutId))
+        .then(async (response) => {
+          if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            const serverMsg = (body as any)?.error;
+            let friendlyMsg: string;
+            if (response.status === 502 || response.status === 503) {
+              friendlyMsg = serverMsg ?? "Service temporarily unavailable. Please try again.";
+            } else if (response.status === 504) {
+              friendlyMsg = serverMsg ?? "Request timed out. Please try again.";
+            } else {
+              friendlyMsg = serverMsg ?? `Something went wrong (${response.status}). Please try again.`;
+            }
+            throw new Error(friendlyMsg);
+          }
+          return response.json();
+        })
+        .then(async (data: {
+          transcript: string;
+          reply: string;
+          audioBase64: string;
+          functionCalled?: string;
+          reminder?: { title: string; content: string; datetime: string };
+          reminderAction?: ReminderActionPayload;
+          note?: NotePayload;
+          noteAction?: NoteActionPayload;
+          memoryAction?: MemoryActionPayload;
+          taskAction?: TaskActionPayload;
+          plan?: Omit<DayPlan, "generatedAt">;
+        }) => {
+          const { transcript: tx, reply: rp, audioBase64: audiob64 } = data;
 
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        // Classify the error for a user-friendly message
-        const serverMsg = (body as any)?.error;
-        let friendlyMsg: string;
-        if (response.status === 502 || response.status === 503) {
-          friendlyMsg = serverMsg ?? "Service temporarily unavailable. Please try again.";
-        } else if (response.status === 504) {
-          friendlyMsg = serverMsg ?? "Request timed out. Please try again.";
-        } else {
-          friendlyMsg = serverMsg ?? `Something went wrong (${response.status}). Please try again.`;
-        }
-        throw new Error(friendlyMsg);
-      }
+          if (!tx?.trim() || !rp) return null;
 
-      const data = (await response.json()) as {
-        transcript: string;
-        reply: string;
-        audioBase64: string;
-        functionCalled?: string;
-        reminder?: { title: string; content: string; datetime: string };
-        reminderAction?: ReminderActionPayload;
-        note?: NotePayload;
-        noteAction?: NoteActionPayload;
-        memoryAction?: MemoryActionPayload;
-        taskAction?: TaskActionPayload;
-        plan?: Omit<DayPlan, "generatedAt">;
-      };
+          setTranscript(tx);
+          setReply(rp);
 
-      const { transcript: tx, reply: rp, audioBase64: audiob64 } = data;
+          // Fire side effects while filler is still playing
+          if (data.note?.content) {
+            callbacks?.onNote?.({ content: data.note.content, title: data.note.title, category: data.note.category });
+          }
+          if (data.noteAction)     callbacks?.onNoteAction?.(data.noteAction);
+          if (data.reminder)       callbacks?.onReminder?.(data.reminder);
+          if (data.reminderAction) callbacks?.onReminderAction?.(data.reminderAction);
+          if (data.memoryAction)   callbacks?.onMemoryAction?.(data.memoryAction);
+          if (data.plan)           callbacks?.onPlan?.({ ...data.plan, generatedAt: Date.now() });
+          if (data.taskAction)     callbacks?.onTaskAction?.(data.taskAction);
+          callbacks?.onTurnComplete?.(tx, rp);
 
-      if (!tx?.trim() || !rp) {
-        setStateSync("idle");
-        inflightRef.current = false;
-        return;
-      }
+          if (!autoplay || !audiob64) return null;
 
-      setTranscript(tx);
-      setReply(rp);
-
-      // Handle side effects from tool calls
-      if (data.note?.content) {
-        callbacks?.onNote?.({ content: data.note.content, title: data.note.title, category: data.note.category });
-      }
-      if (data.noteAction) {
-        callbacks?.onNoteAction?.(data.noteAction);
-      }
-      if (data.reminder) {
-        callbacks?.onReminder?.(data.reminder);
-      }
-      if (data.reminderAction) {
-        callbacks?.onReminderAction?.(data.reminderAction);
-      }
-      if (data.memoryAction) {
-        callbacks?.onMemoryAction?.(data.memoryAction);
-      }
-      if (data.plan) {
-        callbacks?.onPlan?.({ ...data.plan, generatedAt: Date.now() });
-      }
-      if (data.taskAction) {
-        callbacks?.onTaskAction?.(data.taskAction);
-      }
-
-      // Notify parent of completed turn
-      callbacks?.onTurnComplete?.(tx, rp);
-
-      // If TTS failed on the server, audioBase64 will be empty.
-      // The text reply is already shown — skip playback gracefully.
-      if (!autoplay || !audiob64) {
-        setStateSync("idle");
-        inflightRef.current = false;
-        return;
-      }
-
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-      }
-
-      // On web: play directly from a data URI — no file system write needed.
-      // On native: write to a timestamped cache path to avoid collision with
-      // any previously-playing audio that may still be reading the old file.
-      let audioUri: string;
-      if (Platform.OS === "web") {
-        audioUri = `data:audio/mpeg;base64,${audiob64}`;
-      } else {
-        const audioPath = `${FileSystem.cacheDirectory}mo-reply-${Date.now()}.mp3`;
-        await FileSystem.writeAsStringAsync(audioPath, audiob64, {
-          encoding: FileSystem.EncodingType.Base64,
+          // Write real answer audio to a file while filler is still potentially
+          // playing. By the time the filler finishes, the URI is already ready.
+          let audioUri: string;
+          if (Platform.OS === "web") {
+            audioUri = `data:audio/mpeg;base64,${audiob64}`;
+          } else {
+            const audioPath = `${FileSystem.cacheDirectory}mo-reply-${Date.now()}.mp3`;
+            await FileSystem.writeAsStringAsync(audioPath, audiob64, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            audioUri = audioPath;
+          }
+          return audioUri;
         });
-        audioUri = audioPath;
+
+      // ── Concurrent execution ────────────────────────────────────────────────
+      // Promise.all guarantees:
+      //   • Filler plays completely — real answer NEVER starts during the filler.
+      //   • API response is fully ready before audio starts — no buffering wait.
+      //   • If filler ends before API returns: silence while waiting (state stays
+      //     "speaking"), then answer plays the moment it's ready — no flicker.
+      //   • If API returns before filler ends: URI is ready, waits for filler,
+      //     then answer plays immediately — no gap at the transition.
+      const [, answerUri] = await Promise.all([
+        playFillerAsync(),
+        apiPromise,
+      ]);
+
+      // Abort if user stopped manually while we were waiting
+      if (!inflightRef.current) return;
+
+      if (!answerUri) {
+        // STS failed or empty transcript — filler played, now return to idle
+        setStateSync("idle");
+        inflightRef.current = false;
+        return;
       }
 
+      // ── Play the real answer ────────────────────────────────────────────────
+      // Filler is guaranteed finished. No overlap possible.
       const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
+        { uri: answerUri },
         { shouldPlay: false }
       );
       soundRef.current = sound;
@@ -536,6 +607,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       setStateSync("speaking");
       await sound.playAsync();
+
     } catch (err: any) {
       inflightRef.current = false;
       // React Native / Hermes throws "Network request failed" (not "AbortError")
@@ -553,7 +625,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       setStateSync("error");
       setTimeout(() => setStateSync("idle"), 4000);
     }
-  }, [mode, conversationHistory, memories, tasks, reminders, notes, preferences, autoplay, callbacks]);
+  }, [mode, conversationHistory, memories, tasks, reminders, notes, preferences, autoplay, callbacks, playFillerAsync]);
 
   // Keep the ref current so startRecording's interval always calls the
   // latest version of stopAndProcess (avoids stale-closure issues).
@@ -562,6 +634,13 @@ export function useVoice(options: UseVoiceOptions = {}) {
   }, [stopAndProcess]);
 
   const stopSpeaking = useCallback(async () => {
+    // Stop filler if it's still playing
+    if (fillerSoundRef.current) {
+      await fillerSoundRef.current.stopAsync().catch(() => {});
+      await fillerSoundRef.current.unloadAsync().catch(() => {});
+      fillerSoundRef.current = null;
+    }
+    // Stop real answer if it's playing
     if (soundRef.current) {
       await soundRef.current.stopAsync();
       soundRef.current = null;

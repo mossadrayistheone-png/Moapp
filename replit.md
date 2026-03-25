@@ -27,15 +27,19 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ### `artifacts/mo-app` (`@workspace/mo-app`) — Mo: AI Voice Assistant (Native)
 - Expo React Native app, scanned via Expo Go QR code
+- **APK v14** (versionCode 14) — Filler phrase system + ElevenLabs STS pipeline; EAS Build ID: `5789b05c-4246-4d69-90bd-b53d23f319db`
+  - EAS build URL: https://expo.dev/accounts/moexec/projects/moexec/builds/5789b05c-4246-4d69-90bd-b53d23f319db
+  - Filler phrases: 10 pre-generated MP3s in Mo's STS voice (`assets/fillers/filler-01..10.mp3`) play instantly while API processes
+  - ElevenLabs STS pipeline: OpenAI TTS (alloy) → ElevenLabs `/v1/speech-to-speech/{id}/stream` (`eleven_english_sts_v2`)
+  - Bundled 1,592 Metro modules (10 more than v13 for filler audio assets)
 - **APK v12** (versionCode 12) — Realtime voice pipeline (OpenAI Realtime API); EAS Build ID: `87d52ffb-a24e-4780-838f-4001affac57d`
-  - APK file: `artifacts/api-server/public/mo-app-v12.apk` (auto-downloaded when EAS build finishes)
-  - Bundled 129 MB background video, same as v11
+  - APK file: `artifacts/api-server/public/mo-app-v12.apk`
 - **APK v11** (versionCode 11) — restored 129 MB cinematic video, random start position; EAS Build ID: `af4392ce-f2fe-4e95-bc79-7472d80e1ba0`
   - APK file: `artifacts/api-server/public/mo-app-v11.apk` (222 MB)
   - EAS project ID: `1c83b5bc-7a55-49ff-91e4-9a6c5c1984be`, slug: `moexec`
   - Keystore: debug keystore (`androiddebugkey`, password `android`)
-- **Voice pipeline (v12+)**: Realtime WebSocket (`/api/mo/realtime`) → expo-av M4A recording → base64 JSON via WebSocket → server: ffmpeg M4A→PCM16 24kHz → OpenAI Realtime API (`gpt-4o-realtime-preview-2024-12-17`, `shimmer` voice) → PCM16→WAV → base64 WAV to mobile → expo-av playback. Falls back to classic HTTP pipeline (`useVoice`) if WebSocket unavailable.
-- **Voice pipeline (v11, fallback)**: expo-av recording → base64 → Whisper transcription → GPT-4o-mini → ElevenLabs TTS → base64 MP3 → expo-av playback
+- **Voice pipeline (v14, HTTP fallback)**: expo-av recording → base64 → Whisper → GPT-4o-mini+tools → OpenAI TTS (alloy) → ElevenLabs STS → JSON response with `timings` object; filler phrase plays immediately via `Promise.all([playFillerAsync(), apiPromise])` — answer starts only after BOTH filler ends AND API responds (zero overlap)
+- **Voice pipeline (v12+, realtime)**: Realtime WebSocket (`/api/mo/realtime`) → expo-av M4A recording → base64 JSON via WebSocket → server: ffmpeg M4A→PCM16 24kHz → OpenAI Realtime API (`gpt-4o-realtime-preview-2024-12-17`, `shimmer` voice) → PCM16→WAV → base64 WAV to mobile → expo-av playback. Falls back to HTTP pipeline (`useVoice`) if WebSocket unavailable.
 - Four personality modes: Executive, Creative, Motivational, Planner
 - Conversation continuity: last 10 turns sent with every request
 - Notes: full CRUD via voice — save with optional title + category pill, delete by keyword; notes injected into system prompt for context; NoteCard shows title, color-coded category pill, mic/pen source icon
