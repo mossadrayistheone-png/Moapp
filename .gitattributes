@@ -13,3 +13,4 @@ mo-app-v11.apk filter=lfs diff=lfs merge=lfs -text
 artifacts/api-server/public/mo-app-v12.apk filter=lfs diff=lfs merge=lfs -text
 artifacts/api-server/public/mo-app-v13.apk filter=lfs diff=lfs merge=lfs -text
 artifacts/mo/public/mo-app-v13.apk filter=lfs diff=lfs merge=lfs -text
+artifacts/api-server/public/mo-app-v14.apk filter=lfs diff=lfs merge=lfs -text

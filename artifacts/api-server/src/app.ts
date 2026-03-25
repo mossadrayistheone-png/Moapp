@@ -33,21 +33,22 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // Serve static assets (e.g. background.mp4 for the mobile app)
-app.use(
-  express.static(path.resolve("public"), {
-    maxAge: "1d",
-    setHeaders(res, filePath) {
-      if (filePath.endsWith(".mp4")) {
-        res.setHeader("Content-Type", "video/mp4");
-        res.setHeader("Accept-Ranges", "bytes");
-      }
-      if (filePath.endsWith(".apk")) {
-        res.setHeader("Content-Type", "application/vnd.android.package-archive");
-        res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filePath)}"`);
-      }
-    },
-  })
-);
+const staticMiddleware = express.static(path.resolve("public"), {
+  maxAge: "1d",
+  setHeaders(res, filePath) {
+    if (filePath.endsWith(".mp4")) {
+      res.setHeader("Content-Type", "video/mp4");
+      res.setHeader("Accept-Ranges", "bytes");
+    }
+    if (filePath.endsWith(".apk")) {
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filePath)}"`);
+    }
+  },
+});
+app.use(staticMiddleware);
+// Also expose /api/download/* so APKs are reachable through the /api proxy path
+app.use("/api/download", staticMiddleware);
 
 app.use("/api", router);
 
