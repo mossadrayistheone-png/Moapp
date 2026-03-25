@@ -534,54 +534,75 @@ const TOKEN_MAP: Record<string, number> = {
 
 // ── ElevenLabs Speech-to-Speech ───────────────────────────────────────────────
 //
-// Pipeline: GPT reply text → OpenAI TTS (neutral mp3) → ElevenLabs STS (Mo's voice)
+// Pipeline:
+//   text → [3a] OpenAI TTS (alloy, tts-1)  →  source.mp3
+//          [3b] ElevenLabs STS (/stream)    →  Mo's voice mp3
 //
-// ELEVENLABS_STS_API_KEY  — restricted key used exclusively for the STS endpoint
-//   Endpoint: POST /v1/speech-to-speech/{voice_id}
-//   Input:    multipart/form-data with the source audio file
-//   Output:   mp3 audio in Mo's voice
+// Keys:
+//   ELEVENLABS_STS_API_KEY  — restricted, used exclusively for the STS endpoint
+//   ELEVENLABS_VOICE_ID     — target voice character
+//   ELEVENLABS_API_KEY      — no longer used anywhere in active code
 //
-// ELEVENLABS_API_KEY is no longer used for the voice pipeline. It may still be
-// present for legacy reasons but is NOT called anywhere in the active code.
+// Streaming endpoint (/stream) is used for ElevenLabs STS so audio chunks
+// arrive as soon as the model starts generating — reduces server-side
+// buffering latency vs the non-streaming endpoint.
 //
-async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<Buffer> {
-  const voiceId  = process.env.ELEVENLABS_VOICE_ID;
-  const stsKey   = process.env.ELEVENLABS_STS_API_KEY;
-  if (!voiceId || !stsKey) throw new Error("ElevenLabs STS configuration missing (ELEVENLABS_VOICE_ID / ELEVENLABS_STS_API_KEY).");
+interface SynthTimings {
+  openaiTtsMs:    number;  // step 3a: OpenAI TTS duration
+  sourceMp3Bytes: number;  // step 3a: size of neutral audio sent to ElevenLabs
+  elevenStsMs:    number;  // step 3b: ElevenLabs STS duration
+}
+
+async function synthesizeSpeech(
+  text: string,
+  signal?: AbortSignal,
+): Promise<{ buffer: Buffer; timings: SynthTimings }> {
+  const voiceId = process.env.ELEVENLABS_VOICE_ID;
+  const stsKey  = process.env.ELEVENLABS_STS_API_KEY;
+  if (!voiceId || !stsKey)
+    throw new Error("ElevenLabs STS configuration missing (ELEVENLABS_VOICE_ID / ELEVENLABS_STS_API_KEY).");
 
   const timeout = AbortSignal.timeout(22_000);
   const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
 
-  // ── Step 1: Generate neutral source audio via OpenAI TTS ────────────────
-  // Using the fast "alloy" voice as a clean, neutral input for STS.
-  // output format: mp3 (16-bit, 24 kHz) — small and ElevenLabs-compatible.
+  // ── Step 3a: OpenAI TTS → neutral source audio ──────────────────────────
+  // tts-1 is the lowest-latency TTS model. "alloy" is clean and neutral —
+  // a good prosody source for STS to convert into Mo's character.
+  // mp3 keeps the file small for fast upload to ElevenLabs.
+  const t3a = Date.now();
   const ttsRes = await openai.audio.speech.create(
     { model: "tts-1", voice: "alloy", input: text, response_format: "mp3" },
     { signal: combinedSignal }
   );
   const sourceMp3 = Buffer.from(await ttsRes.arrayBuffer());
+  const openaiTtsMs    = Date.now() - t3a;
+  const sourceMp3Bytes = sourceMp3.byteLength;
 
-  // ── Step 2: ElevenLabs STS — apply Mo's voice to the source audio ───────
-  // Endpoint: POST /v1/speech-to-speech/{voice_id}
-  //   model_id eleven_turbo_v2_5 — lowest latency STS model
-  //   output_format mp3_22050_32 — small, clear, fast transfer
+  // ── Step 3b: ElevenLabs STS → Mo's voice ────────────────────────────────
+  // Model: eleven_english_sts_v2 — the dedicated English STS model, lower
+  //   latency than eleven_multilingual_sts_v2. Do NOT use TTS model IDs here.
+  // Endpoint: /stream — streams mp3 chunks as the model generates them,
+  //   reducing the time-to-first-byte on the ElevenLabs side.
+  // optimize_streaming_latency=4 — maximum server-side latency reduction.
+  // output_format=mp3_22050_32 — 22 kHz, 32 kbps — smallest viable quality.
   const formData = new FormData();
   formData.append("audio", new Blob([sourceMp3], { type: "audio/mpeg" }), "source.mp3");
-  formData.append("model_id", "eleven_turbo_v2_5");
+  formData.append("model_id", "eleven_english_sts_v2");
   formData.append("voice_settings", JSON.stringify({
-    stability:        0.72,
-    similarity_boost: 0.82,
-    style:            0.0,
+    stability:         0.72,
+    similarity_boost:  0.82,
+    style:             0.0,
     use_speaker_boost: false,
   }));
 
+  const t3b = Date.now();
   const stsRes = await fetch(
-    `https://api.elevenlabs.io/v1/speech-to-speech/${voiceId}?optimize_streaming_latency=3&output_format=mp3_22050_32`,
+    `https://api.elevenlabs.io/v1/speech-to-speech/${voiceId}/stream?optimize_streaming_latency=4&output_format=mp3_22050_32`,
     {
-      method: "POST",
+      method:  "POST",
       headers: { "xi-api-key": stsKey },
-      body: formData,
-      signal: combinedSignal,
+      body:    formData,
+      signal:  combinedSignal,
     }
   );
 
@@ -590,7 +611,17 @@ async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<Buf
     throw new Error(`ElevenLabs STS error ${stsRes.status}: ${errText}`);
   }
 
-  return Buffer.from(await stsRes.arrayBuffer());
+  // Accumulate streamed chunks into a single buffer.
+  // Even though we need the full buffer before sending the HTTP response,
+  // streaming lets the ElevenLabs server start pushing bytes earlier rather
+  // than buffering the entire audio internally before responding.
+  const chunks: Buffer[] = [];
+  for await (const chunk of stsRes.body as unknown as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const elevenStsMs = Date.now() - t3b;
+
+  return { buffer: Buffer.concat(chunks), timings: { openaiTtsMs, sourceMp3Bytes, elevenStsMs } };
 }
 
 function buildMemorySection(memories: MemoryItem[]): string {
@@ -972,10 +1003,10 @@ router.post("/mo/speak", async (req: Request, res: Response) => {
   }
 
   try {
-    const audioBuffer = await synthesizeSpeech(parsed.data.text);
+    const { buffer } = await synthesizeSpeech(parsed.data.text);
     res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Content-Length", audioBuffer.byteLength);
-    res.send(audioBuffer);
+    res.setHeader("Content-Length", buffer.byteLength);
+    res.send(buffer);
   } catch (err) {
     req.log.error({ err }, "ElevenLabs STS speak error");
     res.status(500).json({ error: "Failed to synthesize speech." });
@@ -1024,6 +1055,15 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
   const t0 = Date.now();
   const elapsed = () => Date.now() - t0;
 
+  // Per-stage timing captured as each stage completes. Used in pipeline_summary.
+  const stageMs: {
+    ffmpeg?:    number;
+    whisper?:   number;
+    gpt?:       number;
+    openaiTts?: number;
+    elevenSts?: number;
+  } = {};
+
   try {
     // ── Stage 1: Whisper transcription ─────────────────────────────────────
     const rawBuffer = Buffer.from(audio, "base64");
@@ -1031,12 +1071,15 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     // Normalise to WAV using ffmpeg so Whisper always receives a format it
     // accepts unambiguously — avoids MIME-type and codec issues from Android.
     req.log.info({ stage: "ffmpeg_start", ms: elapsed(), inputBytes: rawBuffer.byteLength }, "Voice pipeline");
+    const tFfmpeg = Date.now();
     const { buffer: audioBuffer, filename } = await normaliseAudio(rawBuffer, format);
-    req.log.info({ stage: "ffmpeg_done", ms: elapsed(), outputBytes: audioBuffer.byteLength, filename }, "Voice pipeline");
+    stageMs.ffmpeg = Date.now() - tFfmpeg;
+    req.log.info({ stage: "ffmpeg_done", ms: elapsed(), stageMs: stageMs.ffmpeg, outputBytes: audioBuffer.byteLength, filename }, "Voice pipeline");
 
     const audioFile = new File([new Uint8Array(audioBuffer)], filename, { type: "audio/wav" });
 
     req.log.info({ stage: "whisper_start", ms: elapsed() }, "Voice pipeline");
+    const tWhisper = Date.now();
 
     let transcript: string;
     try {
@@ -1056,7 +1099,8 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       return;
     }
 
-    req.log.info({ stage: "whisper_done", ms: elapsed(), chars: transcript.length }, "Voice pipeline");
+    stageMs.whisper = Date.now() - tWhisper;
+    req.log.info({ stage: "whisper_done", ms: elapsed(), stageMs: stageMs.whisper, chars: transcript.length }, "Voice pipeline");
 
     if (!transcript) {
       res.json({ transcript: "", reply: "", audioBase64: "" });
@@ -1073,6 +1117,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     ];
 
     req.log.info({ stage: "gpt_start", ms: elapsed() }, "Voice pipeline");
+    const tGpt = Date.now();
 
     let reply: string;
     let toolResult: ToolCallResult | null;
@@ -1084,27 +1129,57 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       return;
     }
 
-    req.log.info({ stage: "gpt_done", ms: elapsed(), replyChars: reply.length }, "Voice pipeline");
+    stageMs.gpt = Date.now() - tGpt;
+    req.log.info({ stage: "gpt_done", ms: elapsed(), stageMs: stageMs.gpt, replyChars: reply.length }, "Voice pipeline");
 
     if (!reply) {
       res.json({ transcript, reply: "", audioBase64: "" });
       return;
     }
 
-    // ── Stage 3: ElevenLabs STS (graceful fallback — text always returned) ─
-    // Pipeline: OpenAI TTS (alloy, neutral) → ElevenLabs STS (Mo's voice)
+    // ── Stage 3: OpenAI TTS → ElevenLabs STS (graceful — text always returned)
     req.log.info({ stage: "sts_start", ms: elapsed() }, "Voice pipeline");
 
     let audioBase64 = "";
     try {
-      const audioResponseBuffer = await synthesizeSpeech(reply, deadline);
+      const { buffer: audioResponseBuffer, timings } = await synthesizeSpeech(reply, deadline);
+
+      stageMs.openaiTts = timings.openaiTtsMs;
+      stageMs.elevenSts = timings.elevenStsMs;
+
+      req.log.info({
+        stage:       "openai_tts_done",
+        ms:          elapsed(),
+        stageMs:     timings.openaiTtsMs,
+        sourceBytes: timings.sourceMp3Bytes,
+      }, "Voice pipeline");
+
+      req.log.info({
+        stage:    "eleven_sts_done",
+        ms:       elapsed(),
+        stageMs:  timings.elevenStsMs,
+        outBytes: audioResponseBuffer.byteLength,
+      }, "Voice pipeline");
+
       audioBase64 = audioResponseBuffer.toString("base64");
-      req.log.info({ stage: "sts_done", ms: elapsed(), bytes: audioResponseBuffer.byteLength }, "Voice pipeline");
     } catch (err: any) {
-      // TTS failure is non-fatal — return the text reply without audio.
+      // STS failure is non-fatal — return the text reply without audio.
       // The client shows the reply as text and skips playback.
       req.log.warn({ err: err?.message, ms: elapsed() }, "STS failed — returning text-only response");
     }
+
+    // ── Pipeline summary ────────────────────────────────────────────────────
+    // One structured line with every stage's ms, easy to grep and chart.
+    req.log.info({
+      stage:     "pipeline_summary",
+      totalMs:   elapsed(),
+      ffmpegMs:  stageMs.ffmpeg,
+      whisperMs: stageMs.whisper,
+      gptMs:     stageMs.gpt,
+      ttsMs:     stageMs.openaiTts,   // step 3a: OpenAI TTS (neutral source)
+      stsMs:     stageMs.elevenSts,   // step 3b: ElevenLabs STS (Mo's voice)
+      hasAudio:  audioBase64.length > 0,
+    }, "Voice pipeline");
 
     res.json({
       transcript,
