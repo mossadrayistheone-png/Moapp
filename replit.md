@@ -27,6 +27,17 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ### `artifacts/mo-app` (`@workspace/mo-app`) — Mo: AI Voice Assistant (Native)
 - Expo React Native app, scanned via Expo Go QR code
+- **APK v15** (versionCode 15) — **34 MB** (down from 222 MB, 84% reduction); EAS Build ID: `8d1e3427-bd30-4869-b2f1-0e3bff747ca1`
+  - APK file: `artifacts/api-server/public/mo-app-v15.apk` (34 MB)
+  - EAS build URL: https://expo.dev/accounts/moexec/projects/moexec/builds/8d1e3427-bd30-4869-b2f1-0e3bff747ca1
+  - **Size optimizations applied:**
+    1. Background video removed from APK bundle → streams from API server as `background.mp4` (27 MB compressed from 129 MB, saved ~130 MB)
+    2. `reactNativeArchitectures=arm64-v8a` only (was: armeabi-v7a, arm64-v8a, x86, x86_64) — saved ~60 MB of native libs
+    3. R8 minification enabled (`android.enableMinifyInReleaseBuilds=true`) — saved ~5-10 MB
+    4. Shrink resources enabled (`android.enableShrinkResourcesInReleaseBuilds=true`)
+    5. `.easignore` excludes `assets/videos/background.mp4` from EAS project upload
+  - Video URL: `https://EXPO_PUBLIC_DOMAIN/api/download/background.mp4` (set at build time via eas.json env)
+  - Filler phrases: 10 pre-generated MP3s in Mo's STS voice (`assets/fillers/filler-01..10.mp3`) play instantly while API processes
 - **APK v14** (versionCode 14) — Filler phrase system + ElevenLabs STS pipeline; EAS Build ID: `5789b05c-4246-4d69-90bd-b53d23f319db`
   - EAS build URL: https://expo.dev/accounts/moexec/projects/moexec/builds/5789b05c-4246-4d69-90bd-b53d23f319db
   - Filler phrases: 10 pre-generated MP3s in Mo's STS voice (`assets/fillers/filler-01..10.mp3`) play instantly while API processes

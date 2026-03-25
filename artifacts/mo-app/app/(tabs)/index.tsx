@@ -85,9 +85,11 @@ const MODES: { key: AssistantMode; label: string }[] = [
   { key: "planner", label: "Planner" },
 ];
 
-// Background video is bundled into the APK as a local asset.
-// No network download required — Metro packages the .mp4 alongside the JS bundle.
-const BG_VIDEO = require("@/assets/videos/background.mp4");
+// Background video streams from the API server — NOT bundled in the APK.
+// This keeps the APK under 80 MB. The video loads over the network on first play.
+const BG_VIDEO_URI = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api/download/background.mp4`
+  : null;
 
 // ── Status label with animated dots ──────────────────────────────────────────
 
@@ -151,11 +153,6 @@ function StatusLabel({ state }: { state: string }) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [activePlan, setActivePlan] = useState<DayPlan | null>(null);
-
-  // ── Video: bundled local asset — no network required ─────────────────────
-  // background.mp4 is packaged inside the APK at build time via Metro.
-  // BG_VIDEO is a require() reference resolved at bundle time.
-  // ─────────────────────────────────────────────────────────────────────────
 
   const {
     preferences,
@@ -296,13 +293,13 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      {/* Background video — bundled asset, plays instantly with no download.
+      {/* Background video — streamed from API server, not bundled in APK.
           onLoad fires once when the media is ready; we immediately seek to a
           random point in the 9-minute video so every app-open feels different. */}
-      {preferences.backgroundEnabled && (
+      {preferences.backgroundEnabled && BG_VIDEO_URI && (
         <Video
           ref={videoRef}
-          source={BG_VIDEO}
+          source={{ uri: BG_VIDEO_URI }}
           style={StyleSheet.absoluteFillObject}
           resizeMode={ResizeMode.COVER}
           isLooping
@@ -315,7 +312,6 @@ export default function HomeScreen() {
               status.durationMillis > 0 &&
               videoRef.current
             ) {
-              // Pick a random start point anywhere in the full video
               const randomMs = Math.floor(Math.random() * status.durationMillis);
               videoRef.current.setPositionAsync(randomMs);
             }
