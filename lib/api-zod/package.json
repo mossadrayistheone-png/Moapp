@@ -3,6 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "start": "npx tsx src/index.ts"}
   "exports": {
     ".": "./src/index.ts"
   },
