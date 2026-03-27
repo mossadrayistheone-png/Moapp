@@ -7,3 +7,5 @@ artifacts/
 .expo/
 dist/
 build/
+
+*.tsbuildinfo
