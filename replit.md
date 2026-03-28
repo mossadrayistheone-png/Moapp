@@ -18,6 +18,14 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## Artifacts
 
+### `apps/web` (`@workspace/web`) — Frontend Web App
+- Vite + React + TypeScript, output to `apps/web/dist/`
+- Connected to `@workspace/api-client-react` via workspace reference
+- API URL configured via `VITE_API_URL` environment variable (no secrets in client code)
+- Dev: `PORT=3000 pnpm run dev` | Build: `pnpm run build` | Preview: `pnpm run preview`
+- **Render Static Site settings**: Build Command `pnpm --filter @workspace/web build`, Publish Directory `apps/web/dist`, Environment variable `VITE_API_URL=<your-api-server-url>`
+- Key files: `src/App.tsx`, `src/main.tsx`, `src/index.css`, `vite.config.ts`
+
 ### `artifacts/mo` (`@workspace/mo`) — Mo: AI Voice Assistant (Web)
 - React + Vite web app, served at `/`
 - Full voice flow: browser Web Speech API → OpenAI GPT-4o-mini → ElevenLabs TTS
