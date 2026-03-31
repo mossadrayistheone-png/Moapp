@@ -1,5 +1,6 @@
 node_modules/
-artifacts/
+artifacts/*
+!artifacts/api-server
 *.apk
 *.mp4
 *.zip

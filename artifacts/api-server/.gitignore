@@ -1,0 +1,8 @@
+.env
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+public/*.apk
+public/*.mp4
+public/*.zip
