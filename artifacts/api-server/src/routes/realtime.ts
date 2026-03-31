@@ -441,6 +441,17 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
       // than leaving it waiting for the client-side timeout.
       if (isProcessing) {
         abortTurn("Connection to AI service was lost. Please try again.");
+      } else {
+        // Proactively reconnect while the client is still open so the next
+        // turn doesn't pay the full OpenAI handshake cost (~1-8 s).
+        if (clientWs.readyState === 1) {
+          setTimeout(() => {
+            if (clientWs.readyState === 1 && !isProcessing && (!openaiWs || openaiWs.readyState > 1)) {
+              log.info("Proactive OpenAI WS reconnect");
+              openOpenAISession();
+            }
+          }, 500);
+        }
       }
     });
 
