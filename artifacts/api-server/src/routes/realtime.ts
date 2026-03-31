@@ -355,9 +355,15 @@ export function handleRealtimeConnection(clientWs: WsSocket, _req: IncomingMessa
           break;
         }
 
+        case "conversation.item.input_audio_transcription.completed": {
+          const userText = ((event as any).transcript as string | undefined)?.trim();
+          if (userText) sendToClient({ type: "user_transcript", text: userText });
+          break;
+        }
+
         case "response.audio_transcript.done": {
           const text = ((event as any).transcript as string | undefined) || transcriptAcc;
-          if (text) sendToClient({ type: "transcript", text });
+          if (text) sendToClient({ type: "reply", text });
           transcriptAcc = "";
           break;
         }
