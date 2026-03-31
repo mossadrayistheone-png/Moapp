@@ -5,6 +5,8 @@ import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { handleRealtimeConnection } from "./routes/realtime.js";
 
+logger.info({ present: !!process.env["OPENAI_API_KEY"] }, "OPENAI_API_KEY present");
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
