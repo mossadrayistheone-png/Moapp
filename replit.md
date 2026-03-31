@@ -35,7 +35,10 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ### `artifacts/mo-app` (`@workspace/mo-app`) — Mo: AI Voice Assistant (Native)
 - Expo React Native app, scanned via Expo Go QR code
-- **APK v15** (versionCode 15) — **34 MB** (down from 222 MB, 84% reduction); EAS Build ID: `8d1e3427-bd30-4869-b2f1-0e3bff747ca1`
+- **APK v16** (versionCode 16) — **66 MB** (32 MB video now bundled in APK, not streamed); EAS Build ID: `d743f302-9473-4b55-8c7b-fc267a861b22`
+  - APK file: `artifacts/api-server/public/mo-app-v16.apk` (66 MB)
+  - Download: `/api/download/mo-app-v16.apk`
+- **APK v15** (versionCode 15) — **34 MB**; EAS Build ID: `8d1e3427-bd30-4869-b2f1-0e3bff747ca1`
   - APK file: `artifacts/api-server/public/mo-app-v15.apk` (34 MB)
   - EAS build URL: https://expo.dev/accounts/moexec/projects/moexec/builds/8d1e3427-bd30-4869-b2f1-0e3bff747ca1
   - **Size optimizations applied:**
