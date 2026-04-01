@@ -60,7 +60,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   - APK file: `artifacts/api-server/public/mo-app-v11.apk` (222 MB)
   - EAS project ID: `1c83b5bc-7a55-49ff-91e4-9a6c5c1984be`, slug: `moexec`
   - Keystore: debug keystore (`androiddebugkey`, password `android`)
-- **Voice pipeline (v14, HTTP fallback)**: expo-av recording → base64 → Whisper → GPT-4o-mini+tools → OpenAI TTS (alloy) → ElevenLabs STS → JSON response with `timings` object; filler phrase plays immediately via `Promise.all([playFillerAsync(), apiPromise])` — answer starts only after BOTH filler ends AND API responds (zero overlap)
+- **Voice pipeline (active, HTTP)**: expo-av recording → base64 → Whisper (whisper-1) → GPT-4o-mini+tools → ElevenLabs Turbo TTS (`eleven_turbo_v2_5`, `ELEVENLABS_API_KEY`, `/v1/text-to-speech/{voice_id}`) → mp3_22050_32 → base64 JSON; filler phrase (pre-generated bundled MP3) plays immediately via `Promise.all([playFillerAsync(), apiPromise])` — answer starts only after BOTH filler ends AND API responds (zero overlap)
 - **Voice pipeline (v12+, realtime)**: Realtime WebSocket (`/api/mo/realtime`) → expo-av M4A recording → base64 JSON via WebSocket → server: ffmpeg M4A→PCM16 24kHz → OpenAI Realtime API (`gpt-4o-realtime-preview-2024-12-17`, `shimmer` voice) → PCM16→WAV → base64 WAV to mobile → expo-av playback. Falls back to HTTP pipeline (`useVoice`) if WebSocket unavailable.
 - Four personality modes: Executive, Creative, Motivational, Planner
 - Conversation continuity: last 10 turns sent with every request
