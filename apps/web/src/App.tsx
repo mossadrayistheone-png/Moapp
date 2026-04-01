@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { setBaseUrl } from "@workspace/api-client-react";
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "";
-const APK_VERSION = "v17";
+const APK_VERSION = "v18";
 const APK_SIZE = "66 MB";
 const downloadUrl = apiUrl
   ? `${apiUrl}/api/download/mo-app-${APK_VERSION}.apk`

@@ -35,9 +35,11 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ### `artifacts/mo-app` (`@workspace/mo-app`) — Mo: AI Voice Assistant (Native)
 - Expo React Native app, scanned via Expo Go QR code
-- **APK v18** (versionCode 18) — **in progress**; EAS Build ID: `f69033cd-e97a-4047-851d-b9eeaabdb066`
+- **APK v18** (versionCode 18) — **66 MB**; EAS Build ID: `f69033cd-e97a-4047-851d-b9eeaabdb066`
+  - APK file: `artifacts/api-server/public/mo-app-v18.apk`
+  - Download: `/api/download/mo-app-v18.apk`
   - Pipeline fix: direct ElevenLabs Turbo TTS (`eleven_turbo_v2_5`), removed OpenAI TTS → STS chain
-  - index.tsx now imports `useVoice` from `use-voice.ts` (HTTP pipeline, not realtime WS)
+  - index.tsx imports `useVoice` from `use-voice.ts` (HTTP pipeline, realtime WS disabled)
   - EAS build URL: https://expo.dev/accounts/moexec/projects/moexec/builds/f69033cd-e97a-4047-851d-b9eeaabdb066
 - **APK v17** (versionCode 17) — **66 MB**; EAS Build ID: `<v17-build-id>`
   - Download: `/api/download/mo-app-v17.apk`
