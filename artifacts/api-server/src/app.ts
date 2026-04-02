@@ -62,6 +62,10 @@ app.use(staticMiddleware);
 // Also expose /api/download/* so APKs are reachable through the /api proxy path
 app.use("/api/download", staticMiddleware);
 
+// Mount at root so the Replit proxy (which strips the /api prefix before
+// forwarding to port 8080) can reach routes like POST /mo/voice.
+// Also mounted at /api so internal and direct-port access still work.
+app.use(router);
 app.use("/api", router);
 
 export default app;
