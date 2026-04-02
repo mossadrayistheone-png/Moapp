@@ -38,6 +38,7 @@ app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 const APK_REDIRECTS: Record<string, string> = {
   "mo-app-v18.apk": "https://expo.dev/artifacts/eas/wrUDRiZQDbd6AvY9twNRv1.apk",
   "mo-app-v19.apk": "https://expo.dev/artifacts/eas/u4kzt5pPuReq3Gzf2UJxBT.apk",
+  "mo-app-v20.apk": "https://expo.dev/artifacts/eas/6QEZFU3N1Rpj2ah6T5miTK.apk",
 };
 
 for (const [filename, url] of Object.entries(APK_REDIRECTS)) {
