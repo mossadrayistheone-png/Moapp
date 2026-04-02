@@ -37,6 +37,7 @@ app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 // the browser fetches the 66 MB APK straight from EAS's CDN, not through us.
 const APK_REDIRECTS: Record<string, string> = {
   "mo-app-v18.apk": "https://expo.dev/artifacts/eas/wrUDRiZQDbd6AvY9twNRv1.apk",
+  "mo-app-v19.apk": "https://expo.dev/artifacts/eas/u4kzt5pPuReq3Gzf2UJxBT.apk",
 };
 
 for (const [filename, url] of Object.entries(APK_REDIRECTS)) {
@@ -44,7 +45,7 @@ for (const [filename, url] of Object.entries(APK_REDIRECTS)) {
   app.get(`/${filename}`, (_req, res) => res.redirect(302, url));
 }
 
-// Serve static assets (e.g. background.mp4 for the mobile app)
+// Serve static assets (APK downloads etc.)
 const staticMiddleware = express.static(path.resolve("public"), {
   maxAge: "1d",
   setHeaders(res, filePath) {
