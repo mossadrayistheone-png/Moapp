@@ -574,11 +574,8 @@ async function elevenlabsTTS(text: string, signal?: AbortSignal): Promise<Buffer
     throw new Error(`ElevenLabs TTS error ${res.status}: ${errText}`);
   }
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
+  const arrayBuf = await res.arrayBuffer();
+  return Buffer.from(arrayBuf);
 }
 
 // ── Legacy STS (kept for /mo/speak endpoint only) ─────────────────────────────
