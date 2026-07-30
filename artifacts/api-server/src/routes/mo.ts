@@ -12,6 +12,7 @@ import {
 } from "@workspace/api-zod";
 import { getWeather } from "../services/weather.js";
 import { webSearch } from "../services/search.js";
+import { textToSpeechBuffer } from "../services/elevenlabs.js";
 
 const execAsync = promisify(exec);
 
@@ -532,55 +533,11 @@ const TOKEN_MAP: Record<string, number> = {
   long: 220,
 };
 
-// ── ElevenLabs Turbo TTS ─────────────────────────────────────────────────────
-//
-// Direct text → speech in Mo's voice. No intermediate OpenAI TTS step.
-//
-// Model:    eleven_turbo_v2_5  (lowest-latency ElevenLabs model)
-// Endpoint: POST /v1/text-to-speech/{voice_id}
-// Key:      ELEVENLABS_API_KEY
-// Format:   mp3_22050_32 (22 kHz, 32 kbps — smallest viable quality)
-//
-async function elevenlabsTTS(text: string, signal?: AbortSignal): Promise<Buffer> {
-  const voiceId = process.env.ELEVENLABS_VOICE_ID;
-  const apiKey  = process.env.ELEVENLABS_API_KEY;
-  if (!voiceId || !apiKey)
-    throw new Error("ElevenLabs TTS configuration missing (ELEVENLABS_VOICE_ID / ELEVENLABS_API_KEY).");
-
-  const timeout = AbortSignal.timeout(15_000);
-  const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-
-  const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_22050_32`,
-    {
-      method:  "POST",
-      headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_turbo_v2_5",
-        voice_settings: {
-          stability:        0.5,
-          similarity_boost: 0.75,
-          style:            0.0,
-          use_speaker_boost: false,
-        },
-      }),
-      signal: combinedSignal,
-    }
-  );
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "unknown");
-    throw new Error(`ElevenLabs TTS error ${res.status}: ${errText}`);
-  }
-
-  const arrayBuf = await res.arrayBuffer();
-  return Buffer.from(arrayBuf);
-}
-
-// ── Legacy STS (kept for /mo/speak endpoint only) ─────────────────────────────
+// ── ElevenLabs TTS — delegated to the dedicated service module ───────────────
+// See artifacts/api-server/src/services/elevenlabs.ts for the full implementation.
+// Voice is controlled entirely by ELEVENLABS_VOICE_ID — no hardcoded IDs here.
 async function synthesizeSpeech(text: string, signal?: AbortSignal): Promise<{ buffer: Buffer }> {
-  const buffer = await elevenlabsTTS(text, signal);
+  const buffer = await textToSpeechBuffer(text, { signal });
   return { buffer };
 }
 
@@ -1096,13 +1053,13 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       return;
     }
 
-    // ── Stage 3: ElevenLabs Turbo TTS (direct — no OpenAI TTS middle step) ─
+    // ── Stage 3: ElevenLabs TTS via SDK service module ───────────────────────
     const tEleven = Date.now();
     req.log.info({ stage: "eleven_tts_start", ms: elapsed() }, "Voice pipeline");
 
     let audioBase64 = "";
     try {
-      const audioResponseBuffer = await elevenlabsTTS(reply, deadline);
+      const audioResponseBuffer = await textToSpeechBuffer(reply, { signal: deadline });
       stageMs.elevenTts = Date.now() - tEleven;
 
       req.log.info({

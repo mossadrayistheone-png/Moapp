@@ -1,0 +1,1 @@
+- [ElevenLabs SDK integration](elevenlabs-sdk.md) — SDK `convert()` (not `convertAsStream`) works on all plan tiers; `/stream` endpoint needs Creator+.
