@@ -1,1 +1,2 @@
 - [ElevenLabs SDK integration](elevenlabs-sdk.md) — SDK `convert()` (not `convertAsStream`) works on all plan tiers; `/stream` endpoint needs Creator+.
+- [Three-mode carousel architecture](three-mode-carousel.md) — Daily/Executive/Luxury swipe carousel; single useVoice instance in index.tsx; page order [Executive|Daily|Luxury].
