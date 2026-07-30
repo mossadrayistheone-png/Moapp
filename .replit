@@ -64,3 +64,8 @@ externalPort = 3000
 [[ports]]
 localPort = 25629
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+ELEVENLABS_VOICE_ID = "KB1SgdCQOsA9N9XwXxBB"

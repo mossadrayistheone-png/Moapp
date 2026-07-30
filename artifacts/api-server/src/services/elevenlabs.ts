@@ -22,6 +22,7 @@
  */
 
 import { ElevenLabsClient, ElevenLabsError } from "elevenlabs";
+import { Readable } from "stream";
 import type stream from "stream";
 import { logger } from "../lib/logger.js";
 
@@ -102,7 +103,8 @@ export async function textToSpeechStream(
     );
 
     logger.info({ voiceId, chars: text.length }, "[ElevenLabs] TTS ready");
-    return audioStream;
+    // SDK returns a Web ReadableStream; convert to Node.js Readable for .pipe() support
+    return Readable.fromWeb(audioStream as Parameters<typeof Readable.fromWeb>[0]);
   } catch (err: unknown) {
     if (err instanceof ElevenLabsError) {
       logger.error(
