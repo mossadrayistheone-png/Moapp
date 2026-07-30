@@ -876,7 +876,8 @@ async function runWithTools(
 router.post("/mo/chat", async (req: Request, res: Response) => {
   const parsed = MoChatBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid request body" });
+    req.log.warn({ issues: parsed.error.issues }, "MoChatBody validation failed");
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.issues });
     return;
   }
 
@@ -948,7 +949,8 @@ function pipelineDeadline(): AbortSignal {
 router.post("/mo/voice", async (req: Request, res: Response) => {
   const parsed = MoVoiceBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid request body" });
+    req.log.warn({ issues: parsed.error.issues }, "MoVoiceBody validation failed");
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.issues });
     return;
   }
 
