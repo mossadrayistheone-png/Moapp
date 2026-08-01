@@ -7,8 +7,8 @@
  *   ELEVENLABS_API_KEY  — ElevenLabs API key (xi-api-key header)
  *   ELEVENLABS_VOICE_ID — Target voice ID; swap to change the voice
  *
- * Model:  eleven_turbo_v2_5  (lowest-latency ElevenLabs model)
- * Format: mp3_22050_32       (22 kHz, 32 kbps — smallest viable quality for voice)
+ * Model:  eleven_v3   (ElevenLabs v3 — highest quality, emotion-aware)
+ * Format: mp3_44100_128  (44.1 kHz, 128 kbps — full quality for v3)
  *
  * Note on streaming endpoints:
  *   - `textToSpeech.convert()`          → /v1/text-to-speech/{id}         (all plans)
@@ -59,8 +59,8 @@ const VOICE_SETTINGS = {
   use_speaker_boost: false,
 } as const;
 
-const MODEL_ID      = "eleven_turbo_v2_5";
-const OUTPUT_FORMAT = "mp3_22050_32" as const;
+const MODEL_ID      = "eleven_v3";
+const OUTPUT_FORMAT = "mp3_44100_128" as const;
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ export async function textToSpeechStream(
   const voiceId = getVoiceId();
   const client  = createClient();
 
-  logger.info({ voiceId, chars: text.length, model: MODEL_ID }, "[ElevenLabs] Starting TTS");
+  logger.info({ voiceId, modelId: MODEL_ID, chars: text.length }, "[ElevenLabs] Starting TTS — voice_id and model_id confirmed");
 
   try {
     // `convert` calls /v1/text-to-speech/{id} — available on all plan tiers.
@@ -102,7 +102,7 @@ export async function textToSpeechStream(
       }
     );
 
-    logger.info({ voiceId, chars: text.length }, "[ElevenLabs] TTS ready");
+    logger.info({ voiceId, modelId: MODEL_ID, chars: text.length }, "[ElevenLabs] TTS ready");
     // SDK returns a Web ReadableStream; convert to Node.js Readable for .pipe() support
     return Readable.fromWeb(audioStream as Parameters<typeof Readable.fromWeb>[0]);
   } catch (err: unknown) {

@@ -39,7 +39,7 @@ router.post("/voice", async (req: Request, res: Response) => {
     res.setHeader("Content-Type",        "audio/mpeg");
     res.setHeader("Transfer-Encoding",   "chunked");
     res.setHeader("Cache-Control",       "no-cache");
-    res.setHeader("X-Voice-Model",       "eleven_turbo_v2_5");
+    res.setHeader("X-Voice-Model",       "eleven_v3");
     res.setHeader("X-Output-Format",     "mp3_22050_32");
 
     audioStream.pipe(res);
