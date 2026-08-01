@@ -18,3 +18,9 @@ Never use `expo-av`'s `Video` component in this project. Use `expo-video`'s `Vid
 - `allowsFullscreen` does NOT exist on `VideoViewProps` in this version — omit it.
 
 `expo-av` is still fine for **audio** (Sound, Audio recording) — only the Video component is affected.
+
+## Bare workflow — version pinning
+This project has a committed `android/` directory (bare workflow). EAS uses it directly — `app.json` plugins and `android.versionCode` are **ignored**. Always bump `versionCode` in `android/app/build.gradle`, not `app.json`. Plugin config changes require `npx expo prebuild` to regenerate the native directory.
+
+## Version pinning rule
+Never run bare `pnpm add expo-video` (installs latest, currently 57.x). Always use `pnpm add expo-video@~3.0.15` or `npx expo install expo-video` to get the SDK-54-compatible version. Check `node_modules/expo/bundledNativeModules.json` for the correct range of any Expo package.
