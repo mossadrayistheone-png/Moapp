@@ -1,2 +1,3 @@
 - [ElevenLabs SDK integration](elevenlabs-sdk.md) — SDK `convert()` (not `convertAsStream`) works on all plan tiers; `/stream` endpoint needs Creator+.
 - [Three-mode carousel architecture](three-mode-carousel.md) — Daily/Executive/Luxury swipe carousel; single useVoice instance in index.tsx; page order [Executive|Daily|Luxury].
+- [expo-video vs expo-av on New Architecture](expo-video-new-arch.md) — expo-av Video crashes on Fabric (newArchEnabled=true); always use expo-video VideoView + useVideoPlayer instead.
