@@ -1,3 +1,5 @@
 - [ElevenLabs SDK integration](elevenlabs-sdk.md) — SDK `convert()` (not `convertAsStream`) works on all plan tiers; `/stream` endpoint needs Creator+.
 - [Three-mode carousel architecture](three-mode-carousel.md) — Daily/Executive/Luxury swipe carousel; single useVoice instance in index.tsx; page order [Executive|Daily|Luxury].
 - [expo-video vs expo-av on New Architecture](expo-video-new-arch.md) — expo-av Video crashes on Fabric (newArchEnabled=true); always use expo-video VideoView + useVideoPlayer instead.
+- [expo-audio recording migration](expo-audio-migration.md) — expo-av Audio.Recording produces 3-byte empty files on New Architecture; use expo-audio useAudioRecorder instead. API names differ (allowsRecording, playsInSilentMode, etc).
+- [Animated WebP backgrounds](animated-webp-backgrounds.md) — expo-image required (not RN Image) for animated WebP; ffmpeg needs -loop 0 for infinite loop; active-only loading + key swap prevents freeze-on-scroll.
