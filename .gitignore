@@ -1,6 +1,7 @@
 node_modules/
 artifacts/*
 !artifacts/api-server
+!artifacts/mo-app
 *.apk
 *.mp4
 *.zip
