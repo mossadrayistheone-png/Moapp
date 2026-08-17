@@ -359,12 +359,21 @@ export function useVoice(options: UseVoiceOptions = {}) {
     const idx = Math.floor(Math.random() * FILLER_ASSETS.length);
 
     return new Promise<void>((resolve) => {
+      // Safety net: if didJustFinish never fires (expo-av New Architecture edge
+      // case), resolve after 12 s so Promise.all never hangs forever.
+      const safetyTimeout = setTimeout(() => {
+        console.warn("[Mo] Filler safety timeout fired — resolving anyway");
+        fillerSoundRef.current = null;
+        resolve();
+      }, 12_000);
+
       Audio.Sound.createAsync(FILLER_ASSETS[idx], { shouldPlay: false })
         .then(({ sound }) => {
           fillerSoundRef.current = sound;
 
           sound.setOnPlaybackStatusUpdate((status) => {
             if ("didJustFinish" in status && status.didJustFinish) {
+              clearTimeout(safetyTimeout);
               fillerSoundRef.current = null;
               sound.unloadAsync().catch(() => {});
               resolve();
@@ -377,6 +386,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         .catch(() => {
           // Filler failed to load or play — resolve immediately so the real
           // answer is never blocked by a filler audio error.
+          clearTimeout(safetyTimeout);
           fillerSoundRef.current = null;
           resolve();
         });
@@ -583,6 +593,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
           if (!tx?.trim() || !rp) {
             console.warn("[Mo] Empty transcript or reply — tx:", JSON.stringify(tx), "rp:", JSON.stringify(rp));
+            // Show the user that the mic didn't pick up speech rather than
+            // silently returning to idle (the old behaviour was invisible).
+            setErrorMessage("Didn't catch that — tap to try again.");
+            setStateSync("error");
+            setTimeout(() => setStateSync("idle"), 3_000);
             return null;
           }
 
@@ -651,22 +666,45 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       // ── Play the real answer ────────────────────────────────────────────────
       // Filler is guaranteed finished. No overlap possible.
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: answerUri },
-        { shouldPlay: false }
-      );
-      soundRef.current = sound;
+      // Wrapped in its own try/catch so a playback failure (expo-av edge case
+      // on New Architecture) doesn't wipe out the transcript/reply that was
+      // already written to state — the user can still read the response even
+      // if audio fails.
+      try {
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: answerUri },
+          { shouldPlay: false }
+        );
+        soundRef.current = sound;
 
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if ("didJustFinish" in status && status.didJustFinish) {
+        // Safety net: if didJustFinish never fires (expo-av New Architecture
+        // edge case), force-idle after 90 s so the app never gets permanently
+        // stuck in "speaking" state.
+        const answerSafetyTimeout = setTimeout(() => {
+          console.warn("[Mo] Answer safety timeout fired — forcing idle");
           setStateSync("idle");
           inflightRef.current = false;
-          sound.unloadAsync();
-        }
-      });
+          sound.unloadAsync().catch(() => {});
+        }, 90_000);
 
-      setStateSync("speaking");
-      await sound.playAsync();
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if ("didJustFinish" in status && status.didJustFinish) {
+            clearTimeout(answerSafetyTimeout);
+            setStateSync("idle");
+            inflightRef.current = false;
+            sound.unloadAsync();
+          }
+        });
+
+        setStateSync("speaking");
+        await sound.playAsync();
+      } catch (playErr) {
+        // Audio playback failed — transcript/reply are already in state so the
+        // user can see the text. Just return to idle cleanly without an error.
+        console.warn("[Mo] Answer audio playback failed (non-fatal):", playErr);
+        setStateSync("idle");
+        inflightRef.current = false;
+      }
 
     } catch (err: any) {
       // Always clear the abort ref so the next session is not blocked
