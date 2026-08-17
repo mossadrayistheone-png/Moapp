@@ -161,7 +161,7 @@ const PEAK_DROP_DB         = 14;   // drop from speech peak → counts as silenc
                                    //   works even in loud/noisy environments
 const SILENCE_FRAMES       = 3;    // 3 × 200 ms = 0.6 s of sustained silence
 const MAX_SPEECH_MS        = 8_000; // stop 8 s after first speech (noisy env fallback)
-const MAX_RECORD_MS        = 30_000; // hard cap if user never speaks
+const MAX_RECORD_MS        = 8_000; // hard cap — also fires when metering is unavailable
 
 interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
@@ -421,7 +421,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
       const uri = recorder.uri;
 
       if (!uri) {
-        setStateSync("idle");
+        // Recording produced no file — let the user know instead of silent idle
+        setErrorMessage("No audio captured. Tap to try again.");
+        setStateSync("error");
+        setTimeout(() => setStateSync("idle"), 3_000);
         return;
       }
 
