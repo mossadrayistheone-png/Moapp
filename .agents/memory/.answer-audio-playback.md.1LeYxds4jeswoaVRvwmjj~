@@ -1,0 +1,13 @@
+---
+name: Answer audio playback on Android New Architecture
+description: Why Mo's answer audio must not be played from local file:// URIs.
+---
+
+# Answer audio playback (Android New Architecture)
+
+## The rule
+Never play the TTS answer from a local `file://` URI on Android. Stream it over https from the API server, keeping a base64 `data:` URI as a one-shot fallback if https playback never starts.
+
+**Why:** On New Architecture (Fabric, RN 0.81.x), expo-audio's underlying MediaPlayer can silently reject local `file://` URIs — playback never starts, the safety timeout fires every turn, and users get text-only responses.
+
+**How to apply:** When adding or changing answer/audio playback in the mobile app, prefer https URL or data-URI sources; never write the audio to the cache directory and play from disk.

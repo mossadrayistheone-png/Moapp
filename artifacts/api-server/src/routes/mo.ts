@@ -39,6 +39,43 @@ async function normaliseAudio(audioBuffer: Buffer, ext: string): Promise<{ buffe
 
 const router: IRouter = Router();
 
+// ── Short-lived answer-audio cache ───────────────────────────────────────────
+// Android New Architecture's MediaPlayer can silently reject local file:// URIs,
+// so the client plays the answer via an https URL instead. We cache each TTS
+// buffer in memory for a few minutes and serve it from GET /mo/audio/:id.
+const AUDIO_CACHE_TTL_MS = 5 * 60_000;
+const audioCache = new Map<string, { buffer: Buffer; expiresAt: number }>();
+
+function cacheAnswerAudio(buffer: Buffer): string {
+  // Evict expired entries opportunistically
+  const now = Date.now();
+  for (const [key, entry] of audioCache) {
+    if (entry.expiresAt <= now) audioCache.delete(key);
+  }
+  const id = `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  audioCache.set(id, { buffer, expiresAt: now + AUDIO_CACHE_TTL_MS });
+  return id;
+}
+
+router.get("/mo/audio/:id", (req: Request, res: Response) => {
+  const id = req.params.id;
+  if (typeof id !== "string") {
+    res.status(400).json({ error: "Invalid audio id" });
+    return;
+  }
+  const entry = audioCache.get(id);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    if (entry) audioCache.delete(id);
+    res.status(404).json({ error: "Audio not found or expired" });
+    return;
+  }
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Content-Length", entry.buffer.byteLength);
+  res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.send(entry.buffer);
+});
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ── Personality prompts ──────────────────────────────────────────────────────
@@ -1068,6 +1105,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
     req.log.info({ stage: "eleven_tts_start", ms: elapsed() }, "Voice pipeline");
 
     let audioBase64 = "";
+    let audioUrl: string | undefined;
     try {
       const audioResponseBuffer = await textToSpeechBuffer(reply, { signal: deadline });
       stageMs.elevenTts = Date.now() - tEleven;
@@ -1080,6 +1118,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       }, "Voice pipeline");
 
       audioBase64 = audioResponseBuffer.toString("base64");
+      audioUrl = `/api/mo/audio/${cacheAnswerAudio(audioResponseBuffer)}`;
     } catch (err: any) {
       // TTS failure is non-fatal — return text reply without audio.
       req.log.warn({ err: err?.message, ms: elapsed() }, "ElevenLabs TTS failed — returning text-only response");
@@ -1100,6 +1139,7 @@ router.post("/mo/voice", async (req: Request, res: Response) => {
       transcript,
       reply,
       audioBase64,
+      audioUrl,
       functionCalled: toolResult?.functionCalled,
       reminder: toolResult?.reminder,
       reminderAction: toolResult?.reminderAction,

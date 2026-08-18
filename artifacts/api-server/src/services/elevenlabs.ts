@@ -104,7 +104,7 @@ export async function textToSpeechStream(
 
     logger.info({ voiceId, modelId: MODEL_ID, chars: text.length }, "[ElevenLabs] TTS ready");
     // SDK returns a Web ReadableStream; convert to Node.js Readable for .pipe() support
-    return Readable.fromWeb(audioStream as Parameters<typeof Readable.fromWeb>[0]);
+    return Readable.fromWeb(audioStream as unknown as Parameters<typeof Readable.fromWeb>[0]);
   } catch (err: unknown) {
     if (err instanceof ElevenLabsError) {
       logger.error(

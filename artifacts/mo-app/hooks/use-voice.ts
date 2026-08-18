@@ -217,6 +217,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
   // Safety timer: if expo-audio never starts playing within 8 s, force idle
   // so the app never gets permanently stuck in "speaking" state.
   const answerSafetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Base64 data-URI fallback for the answer audio. Used once if the primary
+  // https URL source never starts playing (see safety timeout).
+  const answerFallbackRef    = useRef<string | null>(null);
 
   // ── expo-audio player (answer audio) ─────────────────────────────────────
   const answerPlayer       = useAudioPlayer(answerSource);
@@ -403,6 +406,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         answerPlayerRef.current.pause();
       }
       setAnswerSource(null);
+      answerFallbackRef.current = null;
       isPlayingAnswerRef.current = false;
       playbackStartedRef.current = false;
 
@@ -534,6 +538,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
           transcript: string;
           reply: string;
           audioBase64: string;
+          audioUrl?: string;
           functionCalled?: string;
           reminder?: { title: string; content: string; datetime: string };
           reminderAction?: ReminderActionPayload;
@@ -571,17 +576,20 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
           if (!autoplay || !audiob64) return null;
 
-          // Write answer audio to local cache while filler may still be playing
+          // ── Answer audio source selection ─────────────────────────────────
+          // Android New Architecture's MediaPlayer can silently reject local
+          // file:// URIs, so we never write the answer to disk. Primary source
+          // is the server's https URL (streamed); fallback is a base64 data URI
+          // (already proven on web) if the URL playback never starts.
+          const dataUri = `data:audio/mpeg;base64,${audiob64}`;
           let audioUri: string;
-          if (Platform.OS === "web") {
-            audioUri = `data:audio/mpeg;base64,${audiob64}`;
+          if (Platform.OS !== "web" && data.audioUrl) {
+            audioUri = `${BASE_URL}${data.audioUrl}`;
+            answerFallbackRef.current = dataUri;
+            console.log("[Mo] Answer audio via https URL:", audioUri);
           } else {
-            const audioPath = `${FileSystem.cacheDirectory}mo-reply-${Date.now()}.mp3`;
-            await FileSystem.writeAsStringAsync(audioPath, audiob64, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            audioUri = audioPath;
-            console.log("[Mo] Answer audio written to:", audioUri);
+            audioUri = dataUri;
+            answerFallbackRef.current = null;
           }
           return audioUri;
         });
@@ -617,18 +625,31 @@ export function useVoice(options: UseVoiceOptions = {}) {
       // If expo-audio silently fails to start (native bug or unsupported format),
       // the playback effects never fire and the app gets permanently stuck in
       // "speaking" state with inflightRef=true blocking all future requests.
-      // After 8 s we force idle — the text reply is still visible (hasResponse).
-      if (answerSafetyTimerRef.current) clearTimeout(answerSafetyTimerRef.current);
-      answerSafetyTimerRef.current = setTimeout(() => {
-        answerSafetyTimerRef.current = null;
-        if (isPlayingAnswerRef.current && !playbackStartedRef.current) {
+      // First timeout: retry once with the base64 data-URI fallback (proven on
+      // web). Second timeout: force idle — text reply is still visible.
+      const armAnswerSafetyTimer = () => {
+        if (answerSafetyTimerRef.current) clearTimeout(answerSafetyTimerRef.current);
+        answerSafetyTimerRef.current = setTimeout(() => {
+          answerSafetyTimerRef.current = null;
+          if (!isPlayingAnswerRef.current || playbackStartedRef.current) return;
+
+          const fallback = answerFallbackRef.current;
+          if (fallback) {
+            console.warn("[Mo] Safety timeout — https answer audio never started. Retrying with data URI fallback.");
+            answerFallbackRef.current = null;   // one retry only
+            setAnswerSource(fallback);
+            armAnswerSafetyTimer();
+            return;
+          }
+
           console.warn("[Mo] Safety timeout — answer audio never started. Returning to idle. Text reply still visible.");
           isPlayingAnswerRef.current = false;
           inflightRef.current = false;
           setStateSync("idle");
           setAnswerSource(null);
-        }
-      }, 8_000);
+        }, 8_000);
+      };
+      armAnswerSafetyTimer();
 
     } catch (err: any) {
       fetchAbortRef.current = null;
@@ -684,6 +705,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       try { answerPlayerRef.current.pause(); } catch { /* ignore */ }
     }
     setAnswerSource(null);
+    answerFallbackRef.current = null;
     isPlayingAnswerRef.current = false;
     playbackStartedRef.current = false;
 
@@ -740,6 +762,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       try { answerPlayerRef.current.pause(); } catch { /* ignore */ }
     }
     setAnswerSource(null);
+    answerFallbackRef.current = null;
     isPlayingAnswerRef.current = false;
     playbackStartedRef.current = false;
 
