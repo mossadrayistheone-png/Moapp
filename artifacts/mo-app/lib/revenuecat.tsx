@@ -77,28 +77,46 @@ export function initializeRevenueCat(): void {
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
+/** Tier identifier derived from active entitlements. */
 export type SubscriptionTier = "free" | "executive" | "luxury";
 
 interface SubscriptionContextValue {
   /** User has an active "executive" OR "luxury" entitlement. */
   hasExecutive: boolean;
   /** User has an active "luxury" entitlement specifically. */
+
   hasLuxury: boolean;
   /** Computed active tier — "free" when no paid entitlement is active. */
+
   activeTier: SubscriptionTier;
   /** Expiration/renewal date of the highest active entitlement, or null. */
+
   renewalDate: Date | null;
+  /**
+   * Whether the active subscription will auto-renew.
+   * false means the user has canceled and the entitlement expires on renewalDate.
+   * null when there is no active subscription.
+   */
+
+  willRenew: boolean | null;
   /** RevenueCat was successfully initialised with valid API keys. */
+
   isConfigured: boolean;
   /** Subscription data is still loading from RevenueCat. */
+
   isLoading: boolean;
   /** Raw RevenueCat offerings (for showing live prices in the paywall). */
+
   offerings: PurchasesOfferings | null | undefined;
   /** Purchase a RevenueCat package. */
+
   purchase: (pkg: PurchasesPackage) => Promise<CustomerInfo>;
   /** Restore previous purchases. */
+
   restore: () => Promise<CustomerInfo>;
+
   isPurchasing: boolean;
+
   isRestoring: boolean;
 }
 
@@ -140,19 +158,26 @@ function useSubscriptionContext(isConfigured: boolean): SubscriptionContextValue
     ? "executive"
     : "free";
 
-  // Expiration of the highest active entitlement (null for free / no expiry info)
-  const renewalDate: Date | null = (() => {
-    const entId = hasLuxury ? LUXURY_ENTITLEMENT_ID : hasExecutive ? EXECUTIVE_ENTITLEMENT_ID : null;
-    if (!entId) return null;
-    const exp = active[entId]?.expirationDate;
-    return exp ? new Date(exp) : null;
-  })();
+  // Expiration + renewal state of the highest active entitlement.
+  const activeEntId = hasLuxury
+    ? LUXURY_ENTITLEMENT_ID
+    : hasExecutive
+    ? EXECUTIVE_ENTITLEMENT_ID
+    : null;
+  const activeEntitlement = activeEntId ? active[activeEntId] : null;
+  const renewalDate: Date | null = activeEntitlement?.expirationDate
+    ? new Date(activeEntitlement.expirationDate)
+    : null;
+  const willRenew: boolean | null = activeEntitlement != null
+    ? (activeEntitlement.willRenew ?? false)
+    : null;
 
   return {
     hasExecutive,
     hasLuxury,
     activeTier,
     renewalDate,
+    willRenew,
     isConfigured,
     isLoading: isConfigured && (customerInfoQuery.isLoading || offeringsQuery.isLoading),
     offerings: offeringsQuery.data,

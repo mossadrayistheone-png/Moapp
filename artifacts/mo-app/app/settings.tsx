@@ -44,9 +44,18 @@ const TIER_LABELS: Record<string, string> = {
   luxury:    "Luxury",
 };
 
-function formatRenewal(date: Date | null): string | undefined {
+/**
+ * Formats a renewal/expiry date as a sublabel string.
+ * Uses "Renews" when the subscription will auto-renew, "Expires" when canceled.
+ */
+function formatRenewal(date: Date | null, willRenew: boolean | null): string | undefined {
   if (!date) return undefined;
-  return "Renews " + date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const formatted = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return (willRenew ? "Renews " : "Expires ") + formatted;
 }
 
 async function openManageSubscriptions() {
@@ -64,6 +73,7 @@ export default function SettingsScreen() {
   const {
     activeTier,
     renewalDate,
+    willRenew,
     isConfigured,
     isLoading: subLoading,
     restore,
@@ -167,8 +177,10 @@ export default function SettingsScreen() {
           <View style={[sub.row, sub.border]}>
             <View style={sub.textBlock}>
               <Text style={sub.label}>Plan</Text>
-              {formatRenewal(renewalDate) ? (
-                <Text style={sub.sublabel}>{formatRenewal(renewalDate)}</Text>
+              {formatRenewal(renewalDate, willRenew) ? (
+                <Text style={sub.sublabel}>
+                  {formatRenewal(renewalDate, willRenew)}
+                </Text>
               ) : null}
             </View>
             {subLoading && isConfigured ? (
@@ -189,7 +201,7 @@ export default function SettingsScreen() {
             )}
           </View>
 
-          {/* Restore purchases */}
+          {/* Restore purchases — disabled when RevenueCat is not configured */}
           <Pressable
             onPress={handleRestore}
             disabled={isRestoring || !isConfigured}
@@ -205,7 +217,7 @@ export default function SettingsScreen() {
               : <Feather name="refresh-cw" size={15} color={Colors.mutedWhite} />}
           </Pressable>
 
-          {/* Manage subscription (only when paid) */}
+          {/* Manage subscription (only when paid and configured) */}
           {activeTier !== "free" && isConfigured ? (
             <SettingsNavRow
               label="Manage Subscription"
