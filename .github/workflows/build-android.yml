@@ -70,26 +70,25 @@ jobs:
           echo "OK: artifacts/mo-app/android exists"
           ls artifacts/mo-app/android/
 
-      # 8. Write local.properties
+      # 8. Write local.properties + restrict to arm64-v8a only.
+      #    reactNativeArchitectures is the correct RN 0.71+ way to limit ABIs —
+      #    cuts the APK from ~124 MB to ~50 MB by dropping x86/armeabi-v7a libs.
+      #    This property is appended AFTER expo prebuild regenerates gradle.properties.
       - name: Write android/local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > artifacts/mo-app/android/local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > artifacts/mo-app/android/local.properties
+          echo "reactNativeArchitectures=arm64-v8a" >> artifacts/mo-app/android/gradle.properties
 
-      # 9. Build APK with Gradle
-      #    -Pandroid.injected.build.abi=arm64-v8a  → only build for arm64 (S24 Ultra).
-      #    Cuts the APK from ~124 MB to ~55-65 MB by dropping x86/armeabi-v7a libs.
+      # 9. Build APK with Gradle (standard command — no injected ABI flag)
       - name: Build APK
         working-directory: artifacts/mo-app/android
         env:
           EXPO_PUBLIC_DOMAIN: ${{ inputs.domain || secrets.EXPO_PUBLIC_DOMAIN }}
         run: |
           if [ "${{ inputs.variant }}" = "debug" ]; then
-            ./gradlew :app:assembleDebug \
-              -Pandroid.injected.build.abi=arm64-v8a \
-              --no-daemon
+            ./gradlew :app:assembleDebug --no-daemon
           else
-            ./gradlew :app:assembleRelease \
-              -Pandroid.injected.build.abi=arm64-v8a \
-              --no-daemon
+            ./gradlew :app:assembleRelease --no-daemon
           fi
 
       # 10. Locate and rename APK for a consistent filename.
