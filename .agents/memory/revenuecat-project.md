@@ -31,11 +31,10 @@ Store identifiers: `executive_monthly`, `luxury_monthly` (Android: `executive_mo
   - Package `executive_monthly` → `pkge94b3b046c9`
   - Package `luxury_monthly`    → `pkge310df6d5a0`
 
-## Public API Keys (saved as Replit Secrets)
-- `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY` = `test_YaEbYCxhkQcMMRLmenENEYJkIFm`
-- `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` = `appl_gBqvSwBeiQqmIlwELSKVqJOYhCH`
-- `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` = `goog_jqxARJDCbJILfMOpbZKyVDZOkfi`
-- `REVENUECAT_PROJECT_ID` = `proj7d405e07` (set as env var)
+## API Keys
+Public API keys are stored exclusively as Replit Secrets — never in this file.
+Secret names: `EXPO_PUBLIC_REVENUECAT_TEST_API_KEY`, `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`, `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`.
+Retrieve them via the Replit Secrets UI or environment variables; do not paste values here.
 
 **Why:** These IDs are needed if the seed script is ever re-run, if new entitlements/products are added, or if the RevenueCat dashboard needs debugging without re-seeding.
 

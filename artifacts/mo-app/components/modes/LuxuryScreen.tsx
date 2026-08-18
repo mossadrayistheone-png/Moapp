@@ -25,6 +25,7 @@ import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { CommandCenter, type CommandCenterColors } from "@/components/CommandCenter";
 import { PaywallModal } from "@/components/PaywallModal";
+import { WaveformBars } from "@/components/WaveformBars";
 import { LUXURY_PROMPTS } from "@/constants/prompts";
 import { LuxuryTheme as T } from "@/constants/themes";
 import { useApp } from "@/context/AppContext";
@@ -117,6 +118,7 @@ export interface LuxuryScreenProps {
   transcript: string;
   reply: string;
   errorMessage: string;
+  micLevel?: number;
   onToggle: () => void;
   chatState: ChatState;
   chatReply: string;
@@ -130,7 +132,7 @@ export interface LuxuryScreenProps {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export function LuxuryScreen({
-  voiceState, transcript, reply, errorMessage, onToggle,
+  voiceState, transcript, reply, errorMessage, micLevel, onToggle,
   chatState, chatReply, chatError, onSubmitText,
   width, height, isActive = false,
 }: LuxuryScreenProps) {
@@ -354,7 +356,11 @@ export function LuxuryScreen({
       <View style={[s.inputBar, { marginBottom: insets.bottom + 10 }]}>
         {isVoiceActive ? (
           <View style={s.voiceInputState}>
-            <Text style={s.voiceInputGold}>◆</Text>
+            {voiceState === "listening" ? (
+              <WaveformBars active level={micLevel} color={T.accent} />
+            ) : (
+              <Text style={s.voiceInputGold}>◆</Text>
+            )}
             <Text style={s.voiceStateText}>{voiceStatusLabel}</Text>
           </View>
         ) : (

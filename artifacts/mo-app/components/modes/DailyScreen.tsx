@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { CommandCenter, type CommandCenterColors } from "@/components/CommandCenter";
+import { WaveformBars } from "@/components/WaveformBars";
 import { DAILY_PROMPTS } from "@/constants/prompts";
 import { DailyTheme as T } from "@/constants/themes";
 import { useApp } from "@/context/AppContext";
@@ -119,6 +120,7 @@ export interface DailyScreenProps {
   transcript: string;
   reply: string;
   errorMessage: string;
+  micLevel?: number;
   onToggle: () => void;
   chatState: ChatState;
   chatReply: string;
@@ -132,7 +134,7 @@ export interface DailyScreenProps {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export function DailyScreen({
-  voiceState, transcript, reply, errorMessage, onToggle,
+  voiceState, transcript, reply, errorMessage, micLevel, onToggle,
   chatState, chatReply, chatError, onSubmitText,
   width, height, isActive = false,
 }: DailyScreenProps) {
@@ -345,7 +347,11 @@ export function DailyScreen({
       <View style={[s.inputBar, { marginBottom: insets.bottom + 10 }]}>
         {isVoiceActive ? (
           <View style={s.voiceInputState}>
-            <View style={s.voicePulse} />
+            {voiceState === "listening" ? (
+              <WaveformBars active level={micLevel} color={T.accent} />
+            ) : (
+              <View style={s.voicePulse} />
+            )}
             <Text style={s.voiceStateText}>{voiceStatusLabel}</Text>
           </View>
         ) : (

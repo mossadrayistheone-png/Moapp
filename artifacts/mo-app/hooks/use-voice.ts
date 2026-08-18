@@ -195,6 +195,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const [transcript, setTranscript] = useState("");
   const [reply, setReply] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  // Normalised mic level 0–1; updated every VAD poll tick while listening.
+  // 0 = silence, 1 = maximum input. Falls back to 0 on web / when unavailable.
+  const [micLevel, setMicLevel] = useState(0);
 
   // Answer audio source — drives useAudioPlayer (expo-audio, New Architecture safe).
   // expo-av Audio.Sound works for bundled require() assets (filler) but can fail
@@ -357,6 +360,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
           const status = recorder.getStatus();
           const level: number = (status as any).metering ?? (status as any).averagePower ?? -160;
 
+          // Normalise dBFS (-60…0) → 0–1 and publish for UI animation.
+          // Floor at -60 dBFS (practical silence on mobile mics).
+          const normalised = Math.max(0, Math.min(1, (level + 60) / 60));
+          setMicLevel(normalised);
+
           if (!speechDetected) {
             if (level > VAD_SPEECH_THRESHOLD_DB) {
               speechDetected = true;
@@ -469,6 +477,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         return;
       }
 
+      setMicLevel(0);
       setStateSync("thinking");
       inflightRef.current = true;
 
@@ -858,6 +867,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
     transcript,
     reply,
     errorMessage,
+    micLevel,
     toggle,
     isIdle: state === "idle",
     isListening: state === "listening",

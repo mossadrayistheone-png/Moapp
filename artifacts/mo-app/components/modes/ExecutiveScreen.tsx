@@ -25,6 +25,7 @@ import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { CommandCenter, type CommandCenterColors } from "@/components/CommandCenter";
 import { PaywallModal } from "@/components/PaywallModal";
+import { WaveformBars } from "@/components/WaveformBars";
 import { EXECUTIVE_PROMPTS } from "@/constants/prompts";
 import { ExecutiveTheme as T } from "@/constants/themes";
 import { useApp } from "@/context/AppContext";
@@ -118,6 +119,7 @@ export interface ExecutiveScreenProps {
   transcript: string;
   reply: string;
   errorMessage: string;
+  micLevel?: number;
   onToggle: () => void;
   chatState: ChatState;
   chatReply: string;
@@ -131,7 +133,7 @@ export interface ExecutiveScreenProps {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export function ExecutiveScreen({
-  voiceState, transcript, reply, errorMessage, onToggle,
+  voiceState, transcript, reply, errorMessage, micLevel, onToggle,
   chatState, chatReply, chatError, onSubmitText,
   width, height, isActive = false,
 }: ExecutiveScreenProps) {
@@ -345,7 +347,11 @@ export function ExecutiveScreen({
       <View style={[s.inputBar, { marginBottom: insets.bottom + 10 }]}>
         {isVoiceActive ? (
           <View style={s.voiceInputState}>
-            <View style={s.voiceActiveDot} />
+            {voiceState === "listening" ? (
+              <WaveformBars active level={micLevel} color={T.accent} />
+            ) : (
+              <View style={s.voiceActiveDot} />
+            )}
             <Text style={s.voiceStateText}>{voiceStatusLabel}</Text>
           </View>
         ) : (
