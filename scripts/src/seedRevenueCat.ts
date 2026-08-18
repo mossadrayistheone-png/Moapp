@@ -160,9 +160,9 @@ async function seed() {
   });
   if (appsErr || !appsData?.items?.length) throw new Error("No apps found on project");
 
-  let testApp      = appsData.items.find((a) => a.type === "test_store");
-  let appStoreApp  = appsData.items.find((a) => a.type === "app_store");
-  let playStoreApp = appsData.items.find((a) => a.type === "play_store");
+  let testApp:      App | undefined = appsData.items.find((a) => a.type === "test_store");
+  let appStoreApp:  App | undefined = appsData.items.find((a) => a.type === "app_store");
+  let playStoreApp: App | undefined = appsData.items.find((a) => a.type === "play_store");
 
   if (!testApp) throw new Error("Test Store app not found — RevenueCat creates it automatically");
   console.log("Test Store app:", testApp.id);
@@ -174,7 +174,7 @@ async function seed() {
       body: { name: "Mo iOS", type: "app_store", app_store: { bundle_id: APP_STORE_BUNDLE_ID } },
     });
     if (error) throw new Error("Failed to create App Store app");
-    appStoreApp = data;
+    appStoreApp = data as App;
     console.log("Created App Store app:", data.id);
   } else {
     console.log("App Store app:", appStoreApp.id);
@@ -187,7 +187,7 @@ async function seed() {
       body: { name: "Mo Android", type: "play_store", play_store: { package_name: PLAY_STORE_PACKAGE_NAME } },
     });
     if (error) throw new Error("Failed to create Play Store app");
-    playStoreApp = data;
+    playStoreApp = data as App;
     console.log("Created Play Store app:", data.id);
   } else {
     console.log("Play Store app:", playStoreApp.id);
@@ -207,9 +207,9 @@ async function seed() {
   for (const def of PRODUCTS) {
     console.log(`\n── ${def.displayName} ──`);
 
-    const testProduct      = await ensureProduct(client, project.id, existingProducts.items ?? [], testApp,      "Test Store", def.identifier,     true,  def);
-    const appStoreProduct  = await ensureProduct(client, project.id, existingProducts.items ?? [], appStoreApp,  "App Store",  def.identifier,     false, def);
-    const playStoreProduct = await ensureProduct(client, project.id, existingProducts.items ?? [], playStoreApp, "Play Store", def.playIdentifier, false, def);
+    const testProduct      = await ensureProduct(client, project.id, existingProducts.items ?? [], testApp,       "Test Store", def.identifier,     true,  def);
+    const appStoreProduct  = await ensureProduct(client, project.id, existingProducts.items ?? [], appStoreApp!,  "App Store",  def.identifier,     false, def);
+    const playStoreProduct = await ensureProduct(client, project.id, existingProducts.items ?? [], playStoreApp!, "Play Store", def.playIdentifier, false, def);
 
     productMap[def.entitlementKey] = {
       test:      testProduct,
@@ -384,8 +384,8 @@ async function seed() {
   };
 
   const testKey  = await getKeys(testApp);
-  const iosKey   = await getKeys(appStoreApp);
-  const droidKey = await getKeys(playStoreApp);
+  const iosKey   = await getKeys(appStoreApp!);
+  const droidKey = await getKeys(playStoreApp!);
 
   console.log(`
 ==================================================
@@ -393,8 +393,8 @@ async function seed() {
 ==================================================
   Project ID:            ${project.id}
   Test Store App ID:     ${testApp.id}
-  App Store App ID:      ${appStoreApp.id}
-  Play Store App ID:     ${playStoreApp.id}
+  App Store App ID:      ${appStoreApp!.id}
+  Play Store App ID:     ${playStoreApp!.id}
 
   Entitlements:
     executive  →  ${entitlementMap["executive"]?.id}
