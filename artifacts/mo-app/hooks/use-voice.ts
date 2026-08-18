@@ -639,7 +639,14 @@ export function useVoice(options: UseVoiceOptions = {}) {
     let fetchController: AbortController | null = null;
 
     try {
-      await recorder.stop();
+      // recorder.stop() may throw if the recorder already finished naturally
+      // (forDuration expired before VAD triggered). Swallow that error — the
+      // URI is still valid and the pipeline should continue normally.
+      try {
+        await recorder.stop();
+      } catch (stopErr) {
+        console.warn("[Mo] recorder.stop() threw (likely already stopped by forDuration):", stopErr);
+      }
       recordingActive.current = false;
       const uri = recorder.uri;
       console.log("[Mo] recorder.stop() done — uri:", uri);
