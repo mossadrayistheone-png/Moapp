@@ -346,7 +346,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       if (!granted) {
         setErrorMessage("Microphone permission denied.");
         setStateSync("error");
-        setTimeout(() => setStateSync("idle"), 3000);
+        setTimeout(() => setStateSync("idle"), 8000);
         return;
       }
 
@@ -571,7 +571,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       console.error("[Mo] startRecording FAILED:", err);
       setErrorMessage("Could not start recording.");
       setStateSync("error");
-      setTimeout(() => setStateSync("idle"), 3000);
+      setTimeout(() => setStateSync("idle"), 8000);
     }
   }, []);
 
@@ -654,7 +654,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       if (!uri) {
         setErrorMessage("No audio captured. Tap to try again.");
         setStateSync("error");
-        setTimeout(() => setStateSync("idle"), 3_000);
+        setTimeout(() => setStateSync("idle"), 8_000);
         return;
       }
 
@@ -810,7 +810,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
             console.warn("[Mo] Empty transcript or reply");
             setErrorMessage("Didn't catch that — tap to try again.");
             setStateSync("error");
-            setTimeout(() => setStateSync("idle"), 3_000);
+            setTimeout(() => setStateSync("idle"), 8_000);
             return null;
           }
 
@@ -926,7 +926,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       console.error("[Mo] Voice pipeline error:", err);
       setErrorMessage(msg);
       setStateSync("error");
-      setTimeout(() => setStateSync("idle"), 4000);
+      setTimeout(() => setStateSync("idle"), 8000);
     }
   }, [mode, conversationHistory, memories, tasks, reminders, notes, preferences, autoplay, callbacks, playFillerAsync]);
 

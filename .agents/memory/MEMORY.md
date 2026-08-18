@@ -9,3 +9,5 @@
 - [expo-audio permissions API](expo-audio-migration.md) — use `requestRecordingPermissionsAsync()` (top-level import) not `audioRecorder.requestPermissionsAsync()` which doesn't exist.
 - [Onboarding + privacy policy](onboarding-privacy.md) — OnboardingScreen in components/ (not app/), checked via AsyncStorage @mo/onboarding_complete in _layout.tsx overlay; privacy-policy.html served from api-server/public/ at /privacy-policy.html.
 - [Background fade animation](animated-webp-backgrounds.md) — when going inactive, animate opacity to 0 (duration 300ms) instead of setValue(0); cancel previous animation with a ref before starting new one to prevent flicker on fast swipes.
+- [Voice pipeline silent failures](voice-pipeline-silent-fail.md) — two Android break points that look like "no output": recorder.stop() throw on auto-stop, and API server EADDRINUSE crash.
+- [API server port conflict](api-server-port-conflict.md) — task-agent merges can leave EADDRINUSE; check workflow status after every merge touching api-server.
