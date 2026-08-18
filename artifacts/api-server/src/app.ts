@@ -46,6 +46,14 @@ for (const [filename, url] of Object.entries(APK_REDIRECTS)) {
   app.get(`/${filename}`, (_req, res) => res.redirect(302, url));
 }
 
+// Stable /api/mo/apk shortlink — always redirects to the latest GitHub release.
+// GitHub resolves this to a fresh signed CDN URL on every request, so the link
+// never expires and the phone downloads straight from GitHub's CDN (not through
+// Replit's proxy, which would truncate large streams).
+app.get("/api/mo/apk", (_req, res) => {
+  res.redirect(302, "https://github.com/mossadrayistheone-png/Moapp/releases/download/latest/mo-release-build20.apk");
+});
+
 // Serve static assets (APK downloads etc.)
 const staticMiddleware = express.static(path.resolve("public"), {
   maxAge: "1d",
