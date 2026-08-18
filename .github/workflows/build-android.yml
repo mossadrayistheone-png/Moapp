@@ -20,6 +20,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: write   # needed to create releases and upload assets
 
     steps:
       # 1. Checkout
@@ -84,13 +86,61 @@ jobs:
             ./gradlew :app:assembleRelease --no-daemon
           fi
 
-      # 10. Upload APK artifact
-      - name: Upload APK
+      # 10. Locate and rename APK for a consistent filename
+      - name: Rename APK
+        id: apk
+        run: |
+          if [ "${{ inputs.variant }}" = "debug" ]; then
+            SRC="artifacts/mo-app/android/app/build/outputs/apk/debug/app-debug.apk"
+          else
+            SRC="artifacts/mo-app/android/app/build/outputs/apk/release/app-release.apk"
+          fi
+          DEST="mo-${{ inputs.variant }}-build${{ github.run_number }}.apk"
+          cp "$SRC" "$DEST"
+          echo "path=$DEST" >> "$GITHUB_OUTPUT"
+          echo "name=$DEST" >> "$GITHUB_OUTPUT"
+
+      # 11. Delete old 'latest' release if it exists, then recreate
+      #     This keeps a single always-current download link:
+      #     https://github.com/<owner>/<repo>/releases/download/latest/<apk-name>
+      - name: Delete existing 'latest' release (if any)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create GitHub Release and upload APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest \
+            --title "Mo — Latest Build (#${{ github.run_number }})" \
+            --notes "**Build #${{ github.run_number }}** — variant: \`${{ inputs.variant }}\`
+          Commit: \`${{ github.sha }}\`
+          Domain: \`${{ inputs.domain || secrets.EXPO_PUBLIC_DOMAIN }}\`
+
+          Install on your device:
+          1. Download the APK below
+          2. Open it on your Android device (allow installs from unknown sources)
+          3. Uninstall any previous Mo build first if prompted about signature mismatch" \
+            --prerelease \
+            "${{ steps.apk.outputs.path }}"
+
+      # 12. Print the direct download URL
+      - name: Print download URL
+        run: |
+          echo ""
+          echo "========================================="
+          echo "Direct download link:"
+          echo "https://github.com/${{ github.repository }}/releases/download/latest/${{ steps.apk.outputs.name }}"
+          echo "========================================="
+          echo ""
+
+      # 13. Also keep the Actions artifact as a backup (30-day retention)
+      - name: Upload APK artifact (backup)
         uses: actions/upload-artifact@v4
         with:
           name: mo-${{ inputs.variant }}-build-${{ github.run_number }}
-          path: |
-            artifacts/mo-app/android/app/build/outputs/apk/release/app-release.apk
-            artifacts/mo-app/android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
           retention-days: 30
