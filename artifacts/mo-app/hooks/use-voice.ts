@@ -133,12 +133,14 @@ const BASE_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
 console.log("[Mo] BASE_URL configured:", BASE_URL);
 
 // expo-audio recording options — New Architecture (Fabric) compatible.
-// Android uses ADTS AAC (.aac) instead of an MP4 container: ADTS is a raw
-// frame stream that is decodable mid-write, which lets us read the partial
-// file while recording and transcribe it for the live rolling transcript.
+// Both Android and iOS record ADTS AAC (.aac): ADTS is a raw frame stream
+// that is decodable mid-write, which lets us read the partial file while
+// recording and transcribe it for the live rolling transcript.
 // (MP4/M4A writes its moov index at stop — partial files are unreadable.)
+// On iOS, using extension ".aac" causes AVAudioRecorder to write an ADTS
+// container instead of MP4, making partial reads possible just like Android.
 const RECORDING_OPTIONS: EARecordingOptions = {
-  extension: Platform.OS === "android" ? ".aac" : ".m4a",
+  extension: ".aac",
   sampleRate: 16000,
   numberOfChannels: 1,
   bitRate: 32000,
@@ -150,9 +152,6 @@ const RECORDING_OPTIONS: EARecordingOptions = {
   ios: {
     outputFormat: IOSOutputFormat.MPEG4AAC,
     audioQuality: AudioQuality.MEDIUM,
-    linearPCMBitDepth: 16,
-    linearPCMIsBigEndian: false,
-    linearPCMIsFloat: false,
   },
   web: {},
 };
@@ -189,9 +188,9 @@ const VAD_SILENCE_THRESHOLD_DB     = -35;  // dBFS — quiet-room default
 const VAD_SPEECH_THRESHOLD_DB      = VAD_SILENCE_THRESHOLD_DB + VAD_SPEECH_HYSTERESIS; // -27 dBFS
 
 // Live transcript polling — while listening, the partial recording is uploaded
-// every LIVE_POLL_INTERVAL_MS for a best-effort rolling transcript. Android
-// only (ADTS AAC is streamable; iOS m4a and web blob URIs are not readable
-// mid-recording — those platforms gracefully hide the live transcript area).
+// every LIVE_POLL_INTERVAL_MS for a best-effort rolling transcript. Works on
+// iOS and Android (both record ADTS AAC, which is decodable mid-write).
+// Web blob URIs are not readable mid-recording, so polling is skipped there.
 const LIVE_POLL_INTERVAL_MS = 1200;
 
 interface UseVoiceOptions {
@@ -220,7 +219,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const [state, setState] = useState<AssistantState>("idle");
   const [mode, setMode] = useState<AssistantMode>("daily");
   const [transcript, setTranscript] = useState("");
-  // Rolling in-progress transcript shown while listening (Android only).
+  // Rolling in-progress transcript shown while listening (iOS + Android).
   // Frozen when recording stops; replaced by the final Whisper transcript.
   const [liveTranscript, setLiveTranscript] = useState("");
   const [reply, setReply] = useState("");
@@ -512,10 +511,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
         }
       }, VAD_POLL_INTERVAL_MS);
 
-      // ── Live transcript polling (Android only) ────────────────────────────
-      // ADTS AAC is decodable mid-write, so read the partial file every tick
-      // and post it to /mo/transcribe-live. Best-effort: any failure is
-      // swallowed and the UI simply keeps whatever it last showed.
+      // ── Live transcript polling (iOS + Android) ───────────────────────────
+      // Both platforms record ADTS AAC (.aac), which is decodable mid-write.
+      // Read the partial file every tick and post to /mo/transcribe-live.
+      // Best-effort: any failure is swallowed and the UI keeps whatever it
+      // last showed. Web uses blob URIs that aren't mid-write readable, so
+      // live polling is skipped there.
       stopLivePolling();
       setLiveTranscript("");
       liveSessionRef.current += 1;
@@ -523,7 +524,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       const liveSession = liveSessionRef.current;
       let liveSeq = 0;
 
-      if (Platform.OS === "android") {
+      if (Platform.OS !== "web") {
         liveIntervalRef.current = setInterval(async () => {
           if (!recordingActive.current || stateRef.current !== "listening") {
             stopLivePolling();
@@ -681,9 +682,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       ]);
 
       const audioFormat =
-        Platform.OS === "web" ? "webm"
-        : Platform.OS === "android" ? "aac"
-        : "m4a";
+        Platform.OS === "web" ? "webm" : "aac";
 
       const recentHistory = conversationHistory.slice(-10).map((m) => ({
         role: m.role,
