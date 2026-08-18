@@ -59,7 +59,7 @@ const VOICE_SETTINGS = {
   use_speaker_boost: false,
 } as const;
 
-const MODEL_ID      = "eleven_v3";
+const MODEL_ID      = "eleven_turbo_v2_5";
 const OUTPUT_FORMAT = "mp3_44100_128" as const;
 
 // ── Public API ───────────────────────────────────────────────────────────────

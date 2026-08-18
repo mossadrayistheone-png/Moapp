@@ -156,7 +156,8 @@ const RECORDING_OPTIONS: EARecordingOptions = {
 // Fixed recording duration. record({ forDuration }) tells the native recorder
 // to stop automatically after N seconds. The statusListener (isFinished) fires
 // and triggers stopAndProcess() without any VAD / polling loop.
-const RECORD_DURATION_S = 6;
+// 4 s gives enough room for a full question while cutting 2 s off every round-trip.
+const RECORD_DURATION_S = 4;
 
 interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
