@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.6.0
  */
 
-/** Existing note sent as context with each request */
+/**
+ * Recent note for context
+ */
 export interface NoteContext {
   id: string;
   content: string;

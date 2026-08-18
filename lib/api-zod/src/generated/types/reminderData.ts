@@ -3,9 +3,12 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.6.0
  */
 
+/**
+ * New reminder created by Mo (returned in response)
+ */
 export interface ReminderData {
   title: string;
   content: string;

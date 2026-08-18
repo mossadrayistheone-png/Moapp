@@ -6,7 +6,9 @@
  * OpenAPI spec version: 0.6.0
  */
 
-/** New note created by Mo (returned in response) */
+/**
+ * New note created by Mo
+ */
 export interface NoteData {
   content: string;
   /** Short title extracted from note content (3–6 words) */

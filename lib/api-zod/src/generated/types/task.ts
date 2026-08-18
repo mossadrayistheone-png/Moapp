@@ -3,20 +3,15 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.6.0
  */
 import type { TaskStatus } from "./taskStatus";
 
-/**
- * A user task
- */
 export interface Task {
   id: string;
   title: string;
-  /** Optional ISO 8601 due date in UTC */
   dueDate?: string;
   status: TaskStatus;
-  /** Optional: work, personal, health, finance, other */
   category?: string;
   createdAt: number;
   updatedAt: number;

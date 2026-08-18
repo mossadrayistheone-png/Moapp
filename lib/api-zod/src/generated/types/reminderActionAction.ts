@@ -3,10 +3,11 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 
-export type ReminderActionAction = (typeof ReminderActionAction)[keyof typeof ReminderActionAction];
+export type ReminderActionAction =
+  (typeof ReminderActionAction)[keyof typeof ReminderActionAction];
 
 export const ReminderActionAction = {
   delete: "delete",

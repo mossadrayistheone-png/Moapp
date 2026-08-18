@@ -22,7 +22,6 @@ export interface VoiceRequest {
   messages?: ConversationMessage[];
   preferences?: UserPreferences;
   memories?: MemoryItem[];
-  /** Current pending tasks for context */
   tasks?: Task[];
   /** Upcoming reminders for context */
   reminders?: ReminderContext[];

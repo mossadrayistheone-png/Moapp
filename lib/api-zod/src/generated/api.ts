@@ -7,118 +7,12 @@
  */
 import * as zod from "zod";
 
-// ── Shared sub-schemas ────────────────────────────────────────────────────────
-
-const conversationMessageSchema = zod.object({
-  role: zod.enum(["user", "assistant"]),
-  content: zod.string(),
-});
-
-const preferencesSchema = zod.object({
-  name: zod.string().optional(),
-  location: zod.string().optional(),
-  timezone: zod.string().optional(),
-  responseLength: zod.enum(["short", "medium", "long"]).default("medium"),
-});
-
-const memoryItemSchema = zod
-  .object({
-    id: zod.string(),
-    category: zod.enum(["personal", "preferences", "schedule", "goals"]),
-    key: zod.string(),
-    value: zod.string(),
-    createdAt: zod.number(),
-    updatedAt: zod.number(),
-  })
-  .describe("A single remembered fact about the user");
-
-const taskSchema = zod
-  .object({
-    id: zod.string(),
-    title: zod.string(),
-    dueDate: zod.string().optional().describe("Optional ISO 8601 due date in UTC"),
-    status: zod.enum(["pending", "completed"]),
-    category: zod.string().optional().describe("Optional: work, personal, health, finance, other"),
-    createdAt: zod.number(),
-    updatedAt: zod.number(),
-    completedAt: zod.number().optional(),
-  })
-  .describe("A user task");
-
-const reminderContextSchema = zod
-  .object({
-    id: zod.string(),
-    title: zod.string(),
-    content: zod.string(),
-    datetime: zod.string(),
-  })
-  .describe("Upcoming reminder for context");
-
-const noteContextSchema = zod
-  .object({
-    id: zod.string(),
-    content: zod.string(),
-    title: zod.string().optional(),
-    category: zod.string().optional(),
-    timestamp: zod.number(),
-  })
-  .describe("Recent note for context");
-
-const reminderDataSchema = zod.object({
-  title: zod.string(),
-  content: zod.string(),
-  datetime: zod.string(),
-});
-
-const reminderActionSchema = zod
-  .object({
-    action: zod.enum(["delete", "dismiss"]),
-    title: zod.string().describe("Title keyword to match the reminder to act on"),
-  })
-  .describe("Action taken on an existing reminder");
-
-const noteDataSchema = zod
-  .object({
-    content: zod.string(),
-    title: zod.string().optional().describe("Short title extracted from note content (3–6 words)"),
-    category: zod.string().optional().describe("Optional category: idea | meeting | personal | work | other"),
-    timestamp: zod.string().optional(),
-  })
-  .describe("New note created by Mo");
-
-const noteActionSchema = zod
-  .object({
-    action: zod.literal("delete"),
-    keyword: zod.string().describe("Keyword from the note content or title to identify and remove it"),
-  })
-  .describe("Action taken on an existing note");
-
-const memoryActionSchema = zod.object({
-  action: zod.enum(["save", "delete"]),
-  category: zod.enum(["personal", "preferences", "schedule", "goals"]).optional(),
-  key: zod.string(),
-  value: zod.string().optional(),
-});
-
-const taskActionSchema = zod
-  .object({
-    action: zod.enum(["add", "complete", "delete"]),
-    title: zod.string(),
-    dueDate: zod.string().optional(),
-    category: zod.string().optional(),
-  })
-  .describe("Task operation triggered by this response");
-
-// ── Health ────────────────────────────────────────────────────────────────────
-
 /**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
-
-// ── Chat ──────────────────────────────────────────────────────────────────────
 
 /**
  * @summary Send a message to Mo
@@ -131,19 +25,75 @@ export const MoChatBody = zod.object({
   mode: zod
     .enum(["executive", "daily", "luxury"])
     .default(moChatBodyModeDefault),
-  messages: zod.array(conversationMessageSchema).optional(),
-  preferences: preferencesSchema.optional(),
-  memories: zod.array(memoryItemSchema).optional(),
+  messages: zod
+    .array(
+      zod.object({
+        role: zod.enum(["user", "assistant"]),
+        content: zod.string(),
+      }),
+    )
+    .optional(),
+  preferences: zod
+    .object({
+      name: zod.string().optional(),
+      location: zod.string().optional(),
+      timezone: zod.string().optional(),
+      responseLength: zod
+        .enum(["short", "medium", "long"])
+        .default(moChatBodyPreferencesResponseLengthDefault),
+    })
+    .optional(),
+  memories: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        category: zod.enum(["personal", "preferences", "schedule", "goals"]),
+        key: zod.string(),
+        value: zod.string(),
+        createdAt: zod.number(),
+        updatedAt: zod.number(),
+      }),
+    )
+    .optional(),
   tasks: zod
-    .array(taskSchema)
-    .optional()
-    .describe("Current pending tasks for context"),
+    .array(
+      zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        dueDate: zod.string().optional(),
+        status: zod.enum(["pending", "completed"]),
+        category: zod.string().optional(),
+        createdAt: zod.number(),
+        updatedAt: zod.number(),
+        completedAt: zod.number().optional(),
+      }),
+    )
+    .optional(),
   reminders: zod
-    .array(reminderContextSchema)
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          title: zod.string(),
+          content: zod.string(),
+          datetime: zod.string(),
+        })
+        .describe("Upcoming reminder sent as context with each request"),
+    )
     .optional()
     .describe("Upcoming reminders for context"),
   notes: zod
-    .array(noteContextSchema)
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          content: zod.string(),
+          title: zod.string().optional(),
+          category: zod.string().optional(),
+          timestamp: zod.number(),
+        })
+        .describe("Recent note for context"),
+    )
     .optional()
     .describe("Recent notes for context"),
 });
@@ -151,15 +101,70 @@ export const MoChatBody = zod.object({
 export const MoChatResponse = zod.object({
   reply: zod.string(),
   functionCalled: zod.string().optional(),
-  reminder: reminderDataSchema.optional(),
-  reminderAction: reminderActionSchema.optional(),
-  note: noteDataSchema.optional(),
-  noteAction: noteActionSchema.optional(),
-  memoryAction: memoryActionSchema.optional(),
-  taskAction: taskActionSchema.optional(),
+  reminder: zod
+    .object({
+      title: zod.string(),
+      content: zod.string(),
+      datetime: zod.string(),
+    })
+    .optional()
+    .describe("New reminder created by Mo (returned in response)"),
+  reminderAction: zod
+    .object({
+      action: zod.enum(["delete", "dismiss"]),
+      title: zod
+        .string()
+        .describe("Title keyword to match the reminder to act on"),
+    })
+    .optional()
+    .describe("Action taken on an existing reminder (returned in response)"),
+  note: zod
+    .object({
+      content: zod.string(),
+      title: zod
+        .string()
+        .optional()
+        .describe("Short title extracted from note content (3–6 words)"),
+      category: zod
+        .string()
+        .optional()
+        .describe(
+          "Optional category: idea | meeting | personal | work | other",
+        ),
+      timestamp: zod.string().optional(),
+    })
+    .optional()
+    .describe("New note created by Mo"),
+  memoryAction: zod
+    .object({
+      action: zod.enum(["save", "delete"]),
+      category: zod
+        .enum(["personal", "preferences", "schedule", "goals"])
+        .optional(),
+      key: zod.string(),
+      value: zod.string().optional(),
+    })
+    .optional(),
+  noteAction: zod
+    .object({
+      action: zod.enum(["delete"]),
+      keyword: zod
+        .string()
+        .describe(
+          "Keyword from the note content or title to identify and remove it",
+        ),
+    })
+    .optional()
+    .describe("Action taken on an existing note"),
+  taskAction: zod
+    .object({
+      action: zod.enum(["add", "complete", "delete"]),
+      title: zod.string(),
+      dueDate: zod.string().optional(),
+      category: zod.string().optional(),
+    })
+    .optional(),
 });
-
-// ── Speak ─────────────────────────────────────────────────────────────────────
 
 /**
  * @summary Convert text to speech via ElevenLabs
@@ -167,28 +172,6 @@ export const MoChatResponse = zod.object({
 export const MoSpeakBody = zod.object({
   text: zod.string(),
 });
-
-// ── Live transcription ────────────────────────────────────────────────────────
-
-/**
- * @summary Transcribe a partial in-progress recording for live captions
- */
-export const moTranscribeLiveBodyFormatDefault = `aac`;
-
-export const MoTranscribeLiveBody = zod.object({
-  audio: zod
-    .string()
-    .describe("Base64-encoded partial audio (streamable container, e.g. ADTS AAC)"),
-  format: zod
-    .enum(["m4a", "mp4", "wav", "caf", "aac", "webm"])
-    .default(moTranscribeLiveBodyFormatDefault),
-});
-
-export const MoTranscribeLiveResponse = zod.object({
-  text: zod.string(),
-});
-
-// ── Voice ─────────────────────────────────────────────────────────────────────
 
 /**
  * @summary Full voice pipeline for native mobile
@@ -199,23 +182,81 @@ export const moVoiceBodyPreferencesResponseLengthDefault = `medium`;
 
 export const MoVoiceBody = zod.object({
   audio: zod.string().describe("Base64-encoded audio file"),
-  format: zod.enum(["m4a", "mp4", "wav", "caf", "aac", "webm"]).default(moVoiceBodyFormatDefault),
+  format: zod
+    .enum(["m4a", "mp4", "wav", "caf", "aac", "webm"])
+    .default(moVoiceBodyFormatDefault),
   mode: zod
     .enum(["executive", "daily", "luxury"])
     .default(moVoiceBodyModeDefault),
-  messages: zod.array(conversationMessageSchema).optional(),
-  preferences: preferencesSchema.optional(),
-  memories: zod.array(memoryItemSchema).optional(),
+  messages: zod
+    .array(
+      zod.object({
+        role: zod.enum(["user", "assistant"]),
+        content: zod.string(),
+      }),
+    )
+    .optional(),
+  preferences: zod
+    .object({
+      name: zod.string().optional(),
+      location: zod.string().optional(),
+      timezone: zod.string().optional(),
+      responseLength: zod
+        .enum(["short", "medium", "long"])
+        .default(moVoiceBodyPreferencesResponseLengthDefault),
+    })
+    .optional(),
+  memories: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        category: zod.enum(["personal", "preferences", "schedule", "goals"]),
+        key: zod.string(),
+        value: zod.string(),
+        createdAt: zod.number(),
+        updatedAt: zod.number(),
+      }),
+    )
+    .optional(),
   tasks: zod
-    .array(taskSchema)
-    .optional()
-    .describe("Current pending tasks for context"),
+    .array(
+      zod.object({
+        id: zod.string(),
+        title: zod.string(),
+        dueDate: zod.string().optional(),
+        status: zod.enum(["pending", "completed"]),
+        category: zod.string().optional(),
+        createdAt: zod.number(),
+        updatedAt: zod.number(),
+        completedAt: zod.number().optional(),
+      }),
+    )
+    .optional(),
   reminders: zod
-    .array(reminderContextSchema)
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          title: zod.string(),
+          content: zod.string(),
+          datetime: zod.string(),
+        })
+        .describe("Upcoming reminder sent as context with each request"),
+    )
     .optional()
     .describe("Upcoming reminders for context"),
   notes: zod
-    .array(noteContextSchema)
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          content: zod.string(),
+          title: zod.string().optional(),
+          category: zod.string().optional(),
+          timestamp: zod.number(),
+        })
+        .describe("Recent note for context"),
+    )
     .optional()
     .describe("Recent notes for context"),
 });
@@ -225,10 +266,87 @@ export const MoVoiceResponse = zod.object({
   reply: zod.string(),
   audioBase64: zod.string(),
   functionCalled: zod.string().optional(),
-  reminder: reminderDataSchema.optional(),
-  reminderAction: reminderActionSchema.optional(),
-  note: noteDataSchema.optional(),
-  noteAction: noteActionSchema.optional(),
-  memoryAction: memoryActionSchema.optional(),
-  taskAction: taskActionSchema.optional(),
+  reminder: zod
+    .object({
+      title: zod.string(),
+      content: zod.string(),
+      datetime: zod.string(),
+    })
+    .optional()
+    .describe("New reminder created by Mo (returned in response)"),
+  reminderAction: zod
+    .object({
+      action: zod.enum(["delete", "dismiss"]),
+      title: zod
+        .string()
+        .describe("Title keyword to match the reminder to act on"),
+    })
+    .optional()
+    .describe("Action taken on an existing reminder (returned in response)"),
+  note: zod
+    .object({
+      content: zod.string(),
+      title: zod
+        .string()
+        .optional()
+        .describe("Short title extracted from note content (3–6 words)"),
+      category: zod
+        .string()
+        .optional()
+        .describe(
+          "Optional category: idea | meeting | personal | work | other",
+        ),
+      timestamp: zod.string().optional(),
+    })
+    .optional()
+    .describe("New note created by Mo"),
+  noteAction: zod
+    .object({
+      action: zod.enum(["delete"]),
+      keyword: zod
+        .string()
+        .describe(
+          "Keyword from the note content or title to identify and remove it",
+        ),
+    })
+    .optional()
+    .describe("Action taken on an existing note"),
+  memoryAction: zod
+    .object({
+      action: zod.enum(["save", "delete"]),
+      category: zod
+        .enum(["personal", "preferences", "schedule", "goals"])
+        .optional(),
+      key: zod.string(),
+      value: zod.string().optional(),
+    })
+    .optional(),
+  taskAction: zod
+    .object({
+      action: zod.enum(["add", "complete", "delete"]),
+      title: zod.string(),
+      dueDate: zod.string().optional(),
+      category: zod.string().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Transcribe a partial in-progress recording for live captions
+ */
+export const moTranscribeLiveBodyFormatDefault = `aac`;
+
+export const MoTranscribeLiveBody = zod.object({
+  audio: zod
+    .string()
+    .describe(
+      "Base64-encoded partial audio (streamable container, e.g. ADTS AAC)",
+    ),
+  format: zod
+    .enum(["m4a", "mp4", "wav", "caf", "aac", "webm"])
+    .default(moTranscribeLiveBodyFormatDefault),
+});
+
+export const MoTranscribeLiveResponse = zod.object({
+  text: zod.string(),
 });

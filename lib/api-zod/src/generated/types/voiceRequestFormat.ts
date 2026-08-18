@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.6.0
  */
 
 export type VoiceRequestFormat =
@@ -14,4 +14,6 @@ export const VoiceRequestFormat = {
   mp4: "mp4",
   wav: "wav",
   caf: "caf",
+  aac: "aac",
+  webm: "webm",
 } as const;

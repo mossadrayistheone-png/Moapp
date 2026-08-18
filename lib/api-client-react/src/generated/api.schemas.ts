@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 export interface HealthStatus {
   status: string;
@@ -152,9 +152,43 @@ export interface ReminderAction {
   title: string;
 }
 
+/**
+ * Recent note for context
+ */
+export interface NoteContext {
+  id: string;
+  content: string;
+  title?: string;
+  category?: string;
+  timestamp: number;
+}
+
+/**
+ * New note created by Mo
+ */
 export interface NoteData {
   content: string;
+  /** Short title extracted from note content (3–6 words) */
+  title?: string;
+  /** Optional category: idea | meeting | personal | work | other */
+  category?: string;
   timestamp?: string;
+}
+
+export type NoteActionAction =
+  (typeof NoteActionAction)[keyof typeof NoteActionAction];
+
+export const NoteActionAction = {
+  delete: "delete",
+} as const;
+
+/**
+ * Action taken on an existing note
+ */
+export interface NoteAction {
+  action: NoteActionAction;
+  /** Keyword from the note content or title to identify and remove it */
+  keyword: string;
 }
 
 export type ChatRequestMode =
@@ -175,6 +209,8 @@ export interface ChatRequest {
   tasks?: Task[];
   /** Upcoming reminders for context */
   reminders?: ReminderContext[];
+  /** Recent notes for context */
+  notes?: NoteContext[];
 }
 
 export interface ChatResponse {
@@ -184,6 +220,7 @@ export interface ChatResponse {
   reminderAction?: ReminderAction;
   note?: NoteData;
   memoryAction?: MemoryAction;
+  noteAction?: NoteAction;
   taskAction?: TaskAction;
 }
 
@@ -245,6 +282,8 @@ export interface VoiceRequest {
   tasks?: Task[];
   /** Upcoming reminders for context */
   reminders?: ReminderContext[];
+  /** Recent notes for context */
+  notes?: NoteContext[];
 }
 
 export interface VoiceResponse {
@@ -255,6 +294,7 @@ export interface VoiceResponse {
   reminder?: ReminderData;
   reminderAction?: ReminderAction;
   note?: NoteData;
+  noteAction?: NoteAction;
   memoryAction?: MemoryAction;
   taskAction?: TaskAction;
 }

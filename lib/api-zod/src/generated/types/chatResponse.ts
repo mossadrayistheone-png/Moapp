@@ -18,7 +18,7 @@ export interface ChatResponse {
   reminder?: ReminderData;
   reminderAction?: ReminderAction;
   note?: NoteData;
-  noteAction?: NoteAction;
   memoryAction?: MemoryAction;
+  noteAction?: NoteAction;
   taskAction?: TaskAction;
 }

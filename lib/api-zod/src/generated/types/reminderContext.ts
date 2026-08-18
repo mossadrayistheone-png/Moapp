@@ -3,10 +3,12 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.5.0
+ * OpenAPI spec version: 0.6.0
  */
 
-/** Upcoming reminder sent as context with each request */
+/**
+ * Upcoming reminder sent as context with each request
+ */
 export interface ReminderContext {
   id: string;
   title: string;

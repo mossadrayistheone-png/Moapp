@@ -5,10 +5,13 @@
  * Mo AI Voice Assistant API
  * OpenAPI spec version: 0.6.0
  */
+import type { NoteActionAction } from "./noteActionAction";
 
-/** Action taken on an existing note (returned in response) */
+/**
+ * Action taken on an existing note
+ */
 export interface NoteAction {
-  action: "delete";
+  action: NoteActionAction;
   /** Keyword from the note content or title to identify and remove it */
   keyword: string;
 }

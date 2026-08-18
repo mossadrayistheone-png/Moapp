@@ -6,11 +6,9 @@
  * OpenAPI spec version: 0.6.0
  */
 
-export type TaskActionAction =
-  (typeof TaskActionAction)[keyof typeof TaskActionAction];
+export type NoteActionAction =
+  (typeof NoteActionAction)[keyof typeof NoteActionAction];
 
-export const TaskActionAction = {
-  add: "add",
-  complete: "complete",
+export const NoteActionAction = {
   delete: "delete",
 } as const;

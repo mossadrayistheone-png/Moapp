@@ -3,13 +3,10 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.6.0
  */
 import type { MemoryItemCategory } from "./memoryItemCategory";
 
-/**
- * A single remembered fact about the user
- */
 export interface MemoryItem {
   id: string;
   category: MemoryItemCategory;
