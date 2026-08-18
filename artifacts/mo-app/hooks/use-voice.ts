@@ -138,7 +138,7 @@ const RECORDING_OPTIONS: EARecordingOptions = {
   sampleRate: 16000,
   numberOfChannels: 1,
   bitRate: 32000,
-  isMeteringEnabled: false,
+  isMeteringEnabled: true,   // required for VAD silence detection
   android: {
     outputFormat: "mpeg4",
     audioEncoder: "aac",
@@ -153,11 +153,19 @@ const RECORDING_OPTIONS: EARecordingOptions = {
   web: {},
 };
 
-// Fixed recording duration. record({ forDuration }) tells the native recorder
-// to stop automatically after N seconds. The statusListener (isFinished) fires
-// and triggers stopAndProcess() without any VAD / polling loop.
-// 4 s gives enough room for a full question while cutting 2 s off every round-trip.
+// Fixed recording duration (max cap). record({ forDuration }) tells the native
+// recorder to stop automatically after N seconds. The statusListener (isFinished)
+// fires and triggers stopAndProcess() if VAD never detected silence.
 const RECORD_DURATION_S = 4;
+
+// VAD (Voice Activity Detection) constants.
+// Metering values are in dBFS (0 = full scale, negative = quieter).
+// Levels above VAD_SPEECH_THRESHOLD_DB are treated as speech;
+// below it for VAD_SILENCE_DURATION_MS triggers early stop.
+const VAD_SPEECH_THRESHOLD_DB  = -35;   // dBFS — above this = speech detected
+const VAD_SILENCE_THRESHOLD_DB = -35;   // dBFS — below this = silence
+const VAD_SILENCE_DURATION_MS  = 600;   // ms of continuous silence → stop
+const VAD_POLL_INTERVAL_MS     = 100;   // ms between metering polls
 
 interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
@@ -208,6 +216,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const inflightRef     = useRef(false);
   const fetchAbortRef   = useRef<AbortController | null>(null);
   const stopAndProcessRef = useRef<(() => void) | null>(null);
+
+  // VAD polling interval — cleared when recording stops or is interrupted.
+  const vadIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Filler sound (expo-av, bundled assets — works on all architectures)
   const fillerSoundRef  = useRef<Audio.Sound | null>(null);
@@ -320,6 +331,59 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       recordingActive.current = true;
       console.log("[Mo] recording started — auto-stops in", RECORD_DURATION_S, "s");
+
+      // ── VAD polling ───────────────────────────────────────────────────────
+      // Poll metering every VAD_POLL_INTERVAL_MS. Once speech is detected
+      // (level > VAD_SPEECH_THRESHOLD_DB), start counting silence frames.
+      // After VAD_SILENCE_DURATION_MS of continuous silence, trigger early stop.
+      // The forDuration / setTimeout cap above acts as the outer safety net.
+      let speechDetected = false;
+      let silenceMs = 0;
+
+      // Clear any stale interval from a previous recording
+      if (vadIntervalRef.current) {
+        clearInterval(vadIntervalRef.current);
+        vadIntervalRef.current = null;
+      }
+
+      vadIntervalRef.current = setInterval(() => {
+        if (!recordingActive.current || stateRef.current !== "listening") {
+          clearInterval(vadIntervalRef.current!);
+          vadIntervalRef.current = null;
+          return;
+        }
+
+        try {
+          const status = recorder.getStatus();
+          const level: number = (status as any).metering ?? (status as any).averagePower ?? -160;
+
+          if (!speechDetected) {
+            if (level > VAD_SPEECH_THRESHOLD_DB) {
+              speechDetected = true;
+              silenceMs = 0;
+              console.log("[Mo] VAD — speech detected, level:", level.toFixed(1), "dBFS");
+            }
+            // Haven't heard speech yet — reset silence counter and wait
+            return;
+          }
+
+          // Speech was detected: track silence duration
+          if (level < VAD_SILENCE_THRESHOLD_DB) {
+            silenceMs += VAD_POLL_INTERVAL_MS;
+            if (silenceMs >= VAD_SILENCE_DURATION_MS) {
+              console.log("[Mo] VAD — silence for", silenceMs, "ms — triggering early stop");
+              clearInterval(vadIntervalRef.current!);
+              vadIntervalRef.current = null;
+              stopAndProcessRef.current?.();
+            }
+          } else {
+            // Sound again — reset the silence counter
+            silenceMs = 0;
+          }
+        } catch {
+          // getStatus() may throw if recorder is in a bad state — just skip
+        }
+      }, VAD_POLL_INTERVAL_MS);
       setTranscript("");
       setReply("");
       setErrorMessage("");
@@ -374,6 +438,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
   // ── stopAndProcess ────────────────────────────────────────────────────────
   const stopAndProcess = useCallback(async () => {
     console.log("[Mo] stopAndProcess — state:", stateRef.current, "inflight:", inflightRef.current);
+
+    // Stop VAD polling immediately so it can't re-trigger
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
 
     if (!recordingActive.current) {
       console.log("[Mo] stopAndProcess — no active recording, returning");
@@ -676,6 +746,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const cleanupRef = useRef<((resetState: boolean) => Promise<void>) | undefined>(undefined);
   cleanupRef.current = async (resetState: boolean) => {
     console.log("[Mo] cleanup — resetState:", resetState);
+
+    // Stop VAD polling first so it can't fire after recorder.stop()
+    if (vadIntervalRef.current) {
+      clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
 
     if (fetchAbortRef.current) {
       fetchAbortRef.current.abort();
