@@ -138,6 +138,16 @@ export function LuxuryScreen({
 
   const [inputText, setInputText] = useState("");
 
+  // Fade-in the WebP background only on activation — not on every loop frame.
+  const bgOpacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  useEffect(() => {
+    if (isActive) {
+      bgOpacity.setValue(0);
+      Animated.timing(bgOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    } else {
+      bgOpacity.setValue(0);
+    }
+  }, [isActive]);
 
   const isVoiceActive = voiceState !== "idle" && voiceState !== "error";
   const isChatActive  = chatState === "loading" || chatState === "done";
@@ -185,16 +195,23 @@ export function LuxuryScreen({
       style={{ width, height, backgroundColor: T.bg }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Animated WebP when active, static still when inactive.
-          key swap forces expo-image to remount and restart the loop on return. */}
+      {/* Static still always underneath — never black during transition */}
       <Image
-        key={isActive ? "anim" : "still"}
-        source={isActive
-          ? require("@/assets/videos/luxury-bg.webp")
-          : require("@/assets/images/luxury-still.jpg")}
+        source={require("@/assets/images/luxury-still.jpg")}
         style={StyleSheet.absoluteFillObject}
         contentFit="cover"
       />
+      {/* Animated WebP fades in on activation, hiding the decode-startup flash. */}
+      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
+        <Image
+          key={isActive ? "anim" : "still"}
+          source={isActive
+            ? require("@/assets/videos/luxury-bg.webp")
+            : require("@/assets/images/luxury-still.jpg")}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+        />
+      </Animated.View>
       {/* Scrim so UI stays legible */}
       <LinearGradient
         colors={["rgba(5,4,2,0.18)", "rgba(10,8,4,0.24)", "rgba(5,4,2,0.30)"]}

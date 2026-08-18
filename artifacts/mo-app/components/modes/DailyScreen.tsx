@@ -144,6 +144,19 @@ export function DailyScreen({
   const [inputText, setInputText] = useState("");
   const inputRef = useRef<TextInput>(null);
 
+  // Fade-in the WebP background only on activation — not on every loop frame.
+  // When isActive flips true, opacity animates 0→1 in 400 ms, hiding the
+  // black first-frame decode flash. When leaving, reset instantly so the
+  // next arrival starts from 0.
+  const bgOpacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  useEffect(() => {
+    if (isActive) {
+      bgOpacity.setValue(0);
+      Animated.timing(bgOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    } else {
+      bgOpacity.setValue(0);
+    }
+  }, [isActive]);
 
   const isVoiceActive = voiceState !== "idle" && voiceState !== "error";
   const isChatActive  = chatState === "loading" || chatState === "done";
@@ -186,19 +199,27 @@ export function DailyScreen({
 
   return (
     <KeyboardAvoidingView
-      style={{ width, height, backgroundColor: "#000" }}
+      style={{ width, height, backgroundColor: T.bg }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Animated WebP when active, static still when inactive.
-          key swap forces expo-image to remount and restart the loop on return. */}
+      {/* Static still always underneath — never black during transition */}
       <Image
-        key={isActive ? "anim" : "still"}
-        source={isActive
-          ? require("@/assets/videos/daily-bg.webp")
-          : require("@/assets/images/daily-still.jpg")}
+        source={require("@/assets/images/daily-still.jpg")}
         style={StyleSheet.absoluteFillObject}
         contentFit="cover"
       />
+      {/* Animated WebP fades in on activation, hiding the decode-startup flash.
+          key swap forces expo-image to remount and restart the loop on return. */}
+      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: bgOpacity }]}>
+        <Image
+          key={isActive ? "anim" : "still"}
+          source={isActive
+            ? require("@/assets/videos/daily-bg.webp")
+            : require("@/assets/images/daily-still.jpg")}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+        />
+      </Animated.View>
       {/* Scrim so UI stays legible */}
       <LinearGradient
         colors={["rgba(255,255,255,0.28)", "rgba(235,242,255,0.40)", "rgba(220,233,255,0.52)"]}
