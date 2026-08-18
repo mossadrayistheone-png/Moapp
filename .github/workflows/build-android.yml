@@ -114,42 +114,36 @@ jobs:
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
           echo "name=$DEST" >> "$GITHUB_OUTPUT"
 
-      # 11. Delete old 'latest' release if it exists, then recreate
-      #     This keeps a single always-current download link:
-      #     https://github.com/<owner>/<repo>/releases/download/latest/<apk-name>
-      - name: Delete existing 'latest' release (if any)
+      # 11. Upload APK to Replit Object Storage via the API server.
+      #     This overwrites a fixed GCS path (apks/mo-latest.apk) on every build,
+      #     keeping a single permanent, non-expiring public download URL:
+      #       https://<API_DOMAIN>/api/mo/apk
+      - name: Upload APK to permanent CDN (Replit Object Storage)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_DOMAIN: ${{ inputs.domain || secrets.EXPO_PUBLIC_DOMAIN }}
+          APK_UPLOAD_TOKEN: ${{ secrets.APK_UPLOAD_TOKEN }}
         run: |
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-
-      - name: Create GitHub Release and upload APK
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create latest \
-            --title "Mo — Latest Build (#${{ github.run_number }})" \
-            --notes "**Build #${{ github.run_number }}** — variant: \`${{ inputs.variant }}\`
-          Commit: \`${{ github.sha }}\`
-          Domain: \`${{ inputs.domain || secrets.EXPO_PUBLIC_DOMAIN }}\`
-
-          Install on your device:
-          1. Download the APK below
-          2. Open it on your Android device (allow installs from unknown sources)
-          3. Uninstall any previous Mo build first if prompted about signature mismatch" \
-            "${{ steps.apk.outputs.path }}"
-
-      # 12. Print the direct download URL
-      - name: Print download URL
-        run: |
+          echo "Uploading APK to https://${API_DOMAIN}/api/mo/apk ..."
+          HTTP_STATUS=$(curl -s -o /tmp/upload_response.json -w "%{http_code}" \
+            -X POST "https://${API_DOMAIN}/api/mo/apk" \
+            -H "Authorization: Bearer ${APK_UPLOAD_TOKEN}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@${{ steps.apk.outputs.path }}" \
+            --max-time 300)
+          echo "HTTP status: ${HTTP_STATUS}"
+          cat /tmp/upload_response.json
+          if [ "${HTTP_STATUS}" != "200" ]; then
+            echo "ERROR: Upload failed with HTTP ${HTTP_STATUS}"
+            exit 1
+          fi
           echo ""
-          echo "========================================="
-          echo "Direct download link:"
-          echo "https://github.com/${{ github.repository }}/releases/download/latest/${{ steps.apk.outputs.name }}"
-          echo "========================================="
+          echo "-----------------------------------------"
+          echo "Permanent download link:"
+          echo "https://${API_DOMAIN}/api/mo/apk"
+          echo "-----------------------------------------"
           echo ""
 
-      # 13. Also keep the Actions artifact as a backup (30-day retention)
+      # 12. Also keep the Actions artifact as a backup (30-day retention)
       - name: Upload APK artifact (backup)
         uses: actions/upload-artifact@v4
         with:
