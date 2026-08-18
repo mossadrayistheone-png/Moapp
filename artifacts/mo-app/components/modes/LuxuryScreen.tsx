@@ -116,6 +116,7 @@ const CC_COLORS: CommandCenterColors = {
 export interface LuxuryScreenProps {
   voiceState: AssistantState;
   transcript: string;
+  liveTranscript?: string;
   reply: string;
   errorMessage: string;
   micLevel?: number;
@@ -132,7 +133,7 @@ export interface LuxuryScreenProps {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export function LuxuryScreen({
-  voiceState, transcript, reply, errorMessage, micLevel, onToggle,
+  voiceState, transcript, liveTranscript = "", reply, errorMessage, micLevel, onToggle,
   chatState, chatReply, chatError, onSubmitText,
   width, height, isActive = false,
 }: LuxuryScreenProps) {
@@ -196,6 +197,10 @@ export function LuxuryScreen({
     addPrompt(text, "luxury");
     onSubmitText(text);
   }, [onSubmitText, addPrompt]);
+
+  // Final transcript wins; while it's empty (listening/thinking) show the
+  // live rolling one. Hidden entirely when live transcription is unavailable.
+  const shownTranscript = transcript || liveTranscript;
 
   const voiceStatusLabel =
     voiceState === "listening" ? "Listening…"
@@ -271,10 +276,10 @@ export function LuxuryScreen({
         {/* ── Response card ── */}
         {hasResponse && (
           <View style={s.responseCard}>
-            {transcript ? (
+            {shownTranscript ? (
               <View style={s.transcriptBlock}>
                 <Text style={s.transcriptLabel}>You said</Text>
-                <Text style={s.transcriptText}>"{transcript}"</Text>
+                <Text style={s.transcriptText}>"{shownTranscript}"</Text>
               </View>
             ) : null}
 
@@ -361,7 +366,9 @@ export function LuxuryScreen({
             ) : (
               <Text style={s.voiceInputGold}>◆</Text>
             )}
-            <Text style={s.voiceStateText}>{voiceStatusLabel}</Text>
+            <Text style={s.voiceStateText} numberOfLines={1}>
+              {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
+            </Text>
           </View>
         ) : (
           <TextInput
@@ -509,6 +516,7 @@ const s = StyleSheet.create({
   },
   voiceInputGold: { fontSize: 10, color: T.accent },
   voiceStateText: {
+    flex: 1,
     fontFamily: "CormorantGaramond_400Regular_Italic", fontSize: 16, color: T.textSub,
   },
 });

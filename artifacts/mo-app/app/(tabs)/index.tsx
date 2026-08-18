@@ -156,7 +156,7 @@ export default function HomeScreen() {
   );
 
   // ── Single shared voice instance ──
-  const { state, mode, setMode, transcript, reply, errorMessage, micLevel, toggle } = useVoice({
+  const { state, mode, setMode, transcript, liveTranscript, reply, errorMessage, micLevel, toggle } = useVoice({
     conversationHistory,
     memories,
     tasks,
@@ -240,6 +240,7 @@ export default function HomeScreen() {
   const voiceProps = {
     voiceState:    state,
     transcript,
+    liveTranscript,
     reply,
     errorMessage,
     micLevel,

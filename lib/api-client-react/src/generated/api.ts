@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
@@ -22,6 +22,8 @@ import type {
   ErrorResponse,
   HealthStatus,
   SpeakRequest,
+  TranscribeLiveRequest,
+  TranscribeLiveResponse,
   VoiceRequest,
   VoiceResponse,
 } from "./api.schemas";
@@ -366,4 +368,90 @@ export const useMoVoice = <
   TContext
 > => {
   return useMutation(getMoVoiceMutationOptions(options));
+};
+
+/**
+ * @summary Transcribe a partial in-progress recording for live captions
+ */
+export const getMoTranscribeLiveUrl = () => {
+  return `/api/mo/transcribe-live`;
+};
+
+export const moTranscribeLive = async (
+  transcribeLiveRequest: TranscribeLiveRequest,
+  options?: RequestInit,
+): Promise<TranscribeLiveResponse> => {
+  return customFetch<TranscribeLiveResponse>(getMoTranscribeLiveUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(transcribeLiveRequest),
+  });
+};
+
+export const getMoTranscribeLiveMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof moTranscribeLive>>,
+    TError,
+    { data: BodyType<TranscribeLiveRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof moTranscribeLive>>,
+  TError,
+  { data: BodyType<TranscribeLiveRequest> },
+  TContext
+> => {
+  const mutationKey = ["moTranscribeLive"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof moTranscribeLive>>,
+    { data: BodyType<TranscribeLiveRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return moTranscribeLive(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MoTranscribeLiveMutationResult = NonNullable<
+  Awaited<ReturnType<typeof moTranscribeLive>>
+>;
+export type MoTranscribeLiveMutationBody = BodyType<TranscribeLiveRequest>;
+export type MoTranscribeLiveMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Transcribe a partial in-progress recording for live captions
+ */
+export const useMoTranscribeLive = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof moTranscribeLive>>,
+    TError,
+    { data: BodyType<TranscribeLiveRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof moTranscribeLive>>,
+  TError,
+  { data: BodyType<TranscribeLiveRequest> },
+  TContext
+> => {
+  return useMutation(getMoTranscribeLiveMutationOptions(options));
 };

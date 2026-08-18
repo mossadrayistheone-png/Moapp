@@ -117,6 +117,7 @@ const CC_COLORS: CommandCenterColors = {
 export interface ExecutiveScreenProps {
   voiceState: AssistantState;
   transcript: string;
+  liveTranscript?: string;
   reply: string;
   errorMessage: string;
   micLevel?: number;
@@ -133,7 +134,7 @@ export interface ExecutiveScreenProps {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export function ExecutiveScreen({
-  voiceState, transcript, reply, errorMessage, micLevel, onToggle,
+  voiceState, transcript, liveTranscript = "", reply, errorMessage, micLevel, onToggle,
   chatState, chatReply, chatError, onSubmitText,
   width, height, isActive = false,
 }: ExecutiveScreenProps) {
@@ -197,6 +198,10 @@ export function ExecutiveScreen({
     : voiceState === "thinking" ? "Processing request…"
     : voiceState === "speaking" ? "Tap to interrupt"
     : "";
+
+  // Final transcript wins; while it's empty (listening/thinking) show the
+  // live rolling one. Hidden entirely when live transcription is unavailable.
+  const shownTranscript = transcript || liveTranscript;
 
   return (
     <KeyboardAvoidingView
@@ -264,10 +269,10 @@ export function ExecutiveScreen({
         {/* ── Response card ── */}
         {hasResponse && (
           <View style={s.responseCard}>
-            {transcript ? (
+            {shownTranscript ? (
               <View style={s.transcriptBlock}>
                 <Text style={s.transcriptLabel}>INPUT</Text>
-                <Text style={s.transcriptText}>"{transcript}"</Text>
+                <Text style={s.transcriptText}>"{shownTranscript}"</Text>
               </View>
             ) : null}
 
@@ -352,7 +357,9 @@ export function ExecutiveScreen({
             ) : (
               <View style={s.voiceActiveDot} />
             )}
-            <Text style={s.voiceStateText}>{voiceStatusLabel}</Text>
+            <Text style={s.voiceStateText} numberOfLines={1}>
+              {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
+            </Text>
           </View>
         ) : (
           <TextInput
@@ -474,6 +481,7 @@ const s = StyleSheet.create({
   },
   voiceActiveDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: T.accent },
   voiceStateText: {
+    flex: 1,
     fontFamily: "DMSans_400Regular", fontSize: 13, color: T.textSub, fontStyle: "italic",
   },
 });

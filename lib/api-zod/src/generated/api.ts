@@ -168,6 +168,26 @@ export const MoSpeakBody = zod.object({
   text: zod.string(),
 });
 
+// ── Live transcription ────────────────────────────────────────────────────────
+
+/**
+ * @summary Transcribe a partial in-progress recording for live captions
+ */
+export const moTranscribeLiveBodyFormatDefault = `aac`;
+
+export const MoTranscribeLiveBody = zod.object({
+  audio: zod
+    .string()
+    .describe("Base64-encoded partial audio (streamable container, e.g. ADTS AAC)"),
+  format: zod
+    .enum(["m4a", "mp4", "wav", "caf", "aac", "webm"])
+    .default(moTranscribeLiveBodyFormatDefault),
+});
+
+export const MoTranscribeLiveResponse = zod.object({
+  text: zod.string(),
+});
+
 // ── Voice ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -179,7 +199,7 @@ export const moVoiceBodyPreferencesResponseLengthDefault = `medium`;
 
 export const MoVoiceBody = zod.object({
   audio: zod.string().describe("Base64-encoded audio file"),
-  format: zod.enum(["m4a", "mp4", "wav", "caf"]).default(moVoiceBodyFormatDefault),
+  format: zod.enum(["m4a", "mp4", "wav", "caf", "aac", "webm"]).default(moVoiceBodyFormatDefault),
   mode: zod
     .enum(["executive", "creative", "motivational", "planner"])
     .default(moVoiceBodyModeDefault),

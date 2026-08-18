@@ -118,6 +118,7 @@ const CC_COLORS: CommandCenterColors = {
 export interface DailyScreenProps {
   voiceState: AssistantState;
   transcript: string;
+  liveTranscript?: string;
   reply: string;
   errorMessage: string;
   micLevel?: number;
@@ -134,7 +135,7 @@ export interface DailyScreenProps {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export function DailyScreen({
-  voiceState, transcript, reply, errorMessage, micLevel, onToggle,
+  voiceState, transcript, liveTranscript = "", reply, errorMessage, micLevel, onToggle,
   chatState, chatReply, chatError, onSubmitText,
   width, height, isActive = false,
 }: DailyScreenProps) {
@@ -198,6 +199,10 @@ export function DailyScreen({
     : voiceState === "thinking" ? "Thinking…"
     : voiceState === "speaking" ? "Tap to stop"
     : "";
+
+  // Final transcript wins; while it's empty (listening/thinking) show the
+  // live rolling one. Hidden entirely when live transcription is unavailable.
+  const shownTranscript = transcript || liveTranscript;
 
   return (
     <KeyboardAvoidingView
@@ -264,10 +269,10 @@ export function DailyScreen({
         {/* ── Response card (active conversation) ── */}
         {hasResponse && (
           <View style={s.responseCard}>
-            {transcript ? (
+            {shownTranscript ? (
               <View style={s.transcriptBlock}>
                 <Text style={s.transcriptLabel}>YOU SAID</Text>
-                <Text style={s.transcriptText}>"{transcript}"</Text>
+                <Text style={s.transcriptText}>"{shownTranscript}"</Text>
               </View>
             ) : null}
 
@@ -352,7 +357,9 @@ export function DailyScreen({
             ) : (
               <View style={s.voicePulse} />
             )}
-            <Text style={s.voiceStateText}>{voiceStatusLabel}</Text>
+            <Text style={s.voiceStateText} numberOfLines={1}>
+              {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
+            </Text>
           </View>
         ) : (
           <TextInput
@@ -479,6 +486,7 @@ const s = StyleSheet.create({
   },
   voicePulse: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#EF4444" },
   voiceStateText: {
+    flex: 1,
     fontFamily: "DMSans_400Regular", fontSize: 15, color: T.textSub, fontStyle: "italic",
   },
 });

@@ -133,14 +133,18 @@ const BASE_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
 console.log("[Mo] BASE_URL configured:", BASE_URL);
 
 // expo-audio recording options — New Architecture (Fabric) compatible.
+// Android uses ADTS AAC (.aac) instead of an MP4 container: ADTS is a raw
+// frame stream that is decodable mid-write, which lets us read the partial
+// file while recording and transcribe it for the live rolling transcript.
+// (MP4/M4A writes its moov index at stop — partial files are unreadable.)
 const RECORDING_OPTIONS: EARecordingOptions = {
-  extension: ".m4a",
+  extension: Platform.OS === "android" ? ".aac" : ".m4a",
   sampleRate: 16000,
   numberOfChannels: 1,
   bitRate: 32000,
   isMeteringEnabled: true,   // required for VAD silence detection
   android: {
-    outputFormat: "mpeg4",
+    outputFormat: "aac_adts",
     audioEncoder: "aac",
   },
   ios: {
@@ -166,6 +170,12 @@ const VAD_SPEECH_THRESHOLD_DB  = -35;   // dBFS — above this = speech detected
 const VAD_SILENCE_THRESHOLD_DB = -35;   // dBFS — below this = silence
 const VAD_SILENCE_DURATION_MS  = 600;   // ms of continuous silence → stop
 const VAD_POLL_INTERVAL_MS     = 100;   // ms between metering polls
+
+// Live transcript polling — while listening, the partial recording is uploaded
+// every LIVE_POLL_INTERVAL_MS for a best-effort rolling transcript. Android
+// only (ADTS AAC is streamable; iOS m4a and web blob URIs are not readable
+// mid-recording — those platforms gracefully hide the live transcript area).
+const LIVE_POLL_INTERVAL_MS = 1200;
 
 interface UseVoiceOptions {
   conversationHistory?: ConversationMessage[];
@@ -193,6 +203,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const [state, setState] = useState<AssistantState>("idle");
   const [mode, setMode] = useState<AssistantMode>("daily");
   const [transcript, setTranscript] = useState("");
+  // Rolling in-progress transcript shown while listening (Android only).
+  // Frozen when recording stops; replaced by the final Whisper transcript.
+  const [liveTranscript, setLiveTranscript] = useState("");
   const [reply, setReply] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   // Normalised mic level 0–1; updated every VAD poll tick while listening.
@@ -222,6 +235,20 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
   // VAD polling interval — cleared when recording stops or is interrupted.
   const vadIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Live transcript polling — cleared when recording stops or is interrupted.
+  const liveIntervalRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveInflightRef   = useRef(false);   // one partial upload at a time
+  const liveSessionRef    = useRef(0);       // ignore stale responses across sessions
+  const liveLastSeqRef    = useRef(0);       // ignore out-of-order responses
+
+  const stopLivePolling = () => {
+    if (liveIntervalRef.current) {
+      clearInterval(liveIntervalRef.current);
+      liveIntervalRef.current = null;
+    }
+    liveInflightRef.current = false;
+  };
 
   // Filler sound (expo-av, bundled assets — works on all architectures)
   const fillerSoundRef  = useRef<Audio.Sound | null>(null);
@@ -392,6 +419,61 @@ export function useVoice(options: UseVoiceOptions = {}) {
           // getStatus() may throw if recorder is in a bad state — just skip
         }
       }, VAD_POLL_INTERVAL_MS);
+
+      // ── Live transcript polling (Android only) ────────────────────────────
+      // ADTS AAC is decodable mid-write, so read the partial file every tick
+      // and post it to /mo/transcribe-live. Best-effort: any failure is
+      // swallowed and the UI simply keeps whatever it last showed.
+      stopLivePolling();
+      setLiveTranscript("");
+      liveSessionRef.current += 1;
+      liveLastSeqRef.current = 0;
+      const liveSession = liveSessionRef.current;
+      let liveSeq = 0;
+
+      if (Platform.OS === "android") {
+        liveIntervalRef.current = setInterval(async () => {
+          if (!recordingActive.current || stateRef.current !== "listening") {
+            stopLivePolling();
+            return;
+          }
+          if (liveInflightRef.current) return;   // previous upload still running
+          const uri = recorder.uri;
+          if (!uri) return;
+
+          liveInflightRef.current = true;
+          const seq = ++liveSeq;
+          try {
+            const partialBase64 = await FileSystem.readAsStringAsync(uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            const resp = await fetch(`${BASE_URL}/api/mo/transcribe-live`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ audio: partialBase64, format: "aac" }),
+            });
+            if (!resp.ok) return;
+            const data: { text?: string } = await resp.json();
+            const text = data.text?.trim() ?? "";
+            // Only apply if this session is still current and the response
+            // is newer than anything already shown (uploads can race).
+            if (
+              text &&
+              liveSessionRef.current === liveSession &&
+              seq > liveLastSeqRef.current &&
+              (stateRef.current === "listening" || stateRef.current === "thinking")
+            ) {
+              liveLastSeqRef.current = seq;
+              setLiveTranscript(text);
+            }
+          } catch {
+            // Best-effort — ignore read/network errors, UI falls back gracefully
+          } finally {
+            liveInflightRef.current = false;
+          }
+        }, LIVE_POLL_INTERVAL_MS);
+      }
+
       setTranscript("");
       setReply("");
       setErrorMessage("");
@@ -453,6 +535,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
       vadIntervalRef.current = null;
     }
 
+    // Freeze the live transcript — no more partial uploads; the last shown
+    // text stays visible until the final Whisper transcript replaces it.
+    stopLivePolling();
+
     if (!recordingActive.current) {
       console.log("[Mo] stopAndProcess — no active recording, returning");
       return;
@@ -507,7 +593,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
           : Promise.resolve(),
       ]);
 
-      const audioFormat = Platform.OS === "web" ? "webm" : "m4a";
+      const audioFormat =
+        Platform.OS === "web" ? "webm"
+        : Platform.OS === "android" ? "aac"
+        : "m4a";
 
       const recentHistory = conversationHistory.slice(-10).map((m) => ({
         role: m.role,
@@ -633,6 +722,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
           }
 
           setErrorMessage("");
+          setLiveTranscript("");   // final transcript replaces the live one
           setTranscript(tx);
           setReply(rp);
 
@@ -762,6 +852,9 @@ export function useVoice(options: UseVoiceOptions = {}) {
       vadIntervalRef.current = null;
     }
 
+    stopLivePolling();
+    setLiveTranscript("");
+
     if (fetchAbortRef.current) {
       fetchAbortRef.current.abort();
       fetchAbortRef.current = null;
@@ -865,6 +958,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
     mode,
     setMode,
     transcript,
+    liveTranscript,
     reply,
     errorMessage,
     micLevel,

@@ -3,7 +3,7 @@
  * Do not edit manually.
  * Api
  * Mo AI Voice Assistant API
- * OpenAPI spec version: 0.4.0
+ * OpenAPI spec version: 0.5.0
  */
 export interface HealthStatus {
   status: string;
@@ -48,9 +48,6 @@ export const MemoryItemCategory = {
   goals: "goals",
 } as const;
 
-/**
- * A single remembered fact about the user
- */
 export interface MemoryItem {
   id: string;
   category: MemoryItemCategory;
@@ -92,16 +89,11 @@ export const TaskStatus = {
   completed: "completed",
 } as const;
 
-/**
- * A user task
- */
 export interface Task {
   id: string;
   title: string;
-  /** Optional ISO 8601 due date in UTC */
   dueDate?: string;
   status: TaskStatus;
-  /** Optional: work, personal, health, finance, other */
   category?: string;
   createdAt: number;
   updatedAt: number;
@@ -117,9 +109,6 @@ export const TaskActionAction = {
   delete: "delete",
 } as const;
 
-/**
- * Task operation triggered by this response
- */
 export interface TaskAction {
   action: TaskActionAction;
   title: string;
@@ -127,10 +116,40 @@ export interface TaskAction {
   category?: string;
 }
 
+/**
+ * Upcoming reminder sent as context with each request
+ */
+export interface ReminderContext {
+  id: string;
+  title: string;
+  content: string;
+  datetime: string;
+}
+
+/**
+ * New reminder created by Mo (returned in response)
+ */
 export interface ReminderData {
   title: string;
   content: string;
   datetime: string;
+}
+
+export type ReminderActionAction =
+  (typeof ReminderActionAction)[keyof typeof ReminderActionAction];
+
+export const ReminderActionAction = {
+  delete: "delete",
+  dismiss: "dismiss",
+} as const;
+
+/**
+ * Action taken on an existing reminder (returned in response)
+ */
+export interface ReminderAction {
+  action: ReminderActionAction;
+  /** Title keyword to match the reminder to act on */
+  title: string;
 }
 
 export interface NoteData {
@@ -154,17 +173,41 @@ export interface ChatRequest {
   messages?: ConversationMessage[];
   preferences?: UserPreferences;
   memories?: MemoryItem[];
-  /** Current pending tasks for context */
   tasks?: Task[];
+  /** Upcoming reminders for context */
+  reminders?: ReminderContext[];
 }
 
 export interface ChatResponse {
   reply: string;
   functionCalled?: string;
   reminder?: ReminderData;
+  reminderAction?: ReminderAction;
   note?: NoteData;
   memoryAction?: MemoryAction;
   taskAction?: TaskAction;
+}
+
+export type TranscribeLiveRequestFormat =
+  (typeof TranscribeLiveRequestFormat)[keyof typeof TranscribeLiveRequestFormat];
+
+export const TranscribeLiveRequestFormat = {
+  m4a: "m4a",
+  mp4: "mp4",
+  wav: "wav",
+  caf: "caf",
+  aac: "aac",
+  webm: "webm",
+} as const;
+
+export interface TranscribeLiveRequest {
+  /** Base64-encoded partial audio (streamable container, e.g. ADTS AAC) */
+  audio: string;
+  format?: TranscribeLiveRequestFormat;
+}
+
+export interface TranscribeLiveResponse {
+  text: string;
 }
 
 export interface SpeakRequest {
@@ -179,6 +222,8 @@ export const VoiceRequestFormat = {
   mp4: "mp4",
   wav: "wav",
   caf: "caf",
+  aac: "aac",
+  webm: "webm",
 } as const;
 
 export type VoiceRequestMode =
@@ -199,8 +244,9 @@ export interface VoiceRequest {
   messages?: ConversationMessage[];
   preferences?: UserPreferences;
   memories?: MemoryItem[];
-  /** Current pending tasks for context */
   tasks?: Task[];
+  /** Upcoming reminders for context */
+  reminders?: ReminderContext[];
 }
 
 export interface VoiceResponse {
@@ -209,6 +255,7 @@ export interface VoiceResponse {
   audioBase64: string;
   functionCalled?: string;
   reminder?: ReminderData;
+  reminderAction?: ReminderAction;
   note?: NoteData;
   memoryAction?: MemoryAction;
   taskAction?: TaskAction;

@@ -8,6 +8,7 @@ import OpenAI from "openai";
 import {
   MoChatBody,
   MoSpeakBody,
+  MoTranscribeLiveBody,
   MoVoiceBody,
 } from "@workspace/api-zod";
 import { getWeather } from "../services/weather.js";
@@ -961,6 +962,44 @@ router.post("/mo/speak", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "ElevenLabs STS speak error");
     res.status(500).json({ error: "Failed to synthesize speech." });
+  }
+});
+
+// ── Live partial transcription ───────────────────────────────────────────────
+// Called repeatedly by the client while recording to show a rolling transcript.
+// The client records ADTS AAC (streamable — decodable mid-write), reads the
+// partial file, and posts it here. Must be fast: short Whisper timeout, and
+// failures return an empty text so the client simply hides the live area.
+router.post("/mo/transcribe-live", async (req: Request, res: Response) => {
+  const parsed = MoTranscribeLiveBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body" });
+    return;
+  }
+  const { audio, format = "aac" } = parsed.data;
+
+  try {
+    const rawBuffer = Buffer.from(audio, "base64");
+    if (rawBuffer.byteLength < 2_000) {
+      // Too little audio to transcribe meaningfully
+      res.json({ text: "" });
+      return;
+    }
+
+    // Normalise partial audio to WAV — ffmpeg tolerates truncated ADTS/webm
+    // streams and decodes whatever complete frames exist so far.
+    const { buffer: wavBuffer, filename } = await normaliseAudio(rawBuffer, format);
+    const audioFile = new File([new Uint8Array(wavBuffer)], filename, { type: "audio/wav" });
+
+    const transcription = await openai.audio.transcriptions.create(
+      { file: audioFile, model: "whisper-1", language: "en" },
+      { timeout: 6_000 }
+    );
+    res.json({ text: transcription.text.trim() });
+  } catch (err: any) {
+    // Non-fatal by design — live captions are best-effort.
+    req.log.warn({ err: err?.message }, "Live transcription failed");
+    res.json({ text: "" });
   }
 });
 
