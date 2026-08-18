@@ -22,10 +22,9 @@ import { useApp, type ResponseLength } from "@/context/AppContext";
 import type { AssistantMode } from "@/hooks/use-voice";
 
 const MODES: { key: AssistantMode; label: string }[] = [
+  { key: "daily", label: "Daily" },
   { key: "executive", label: "Executive" },
-  { key: "creative", label: "Creative" },
-  { key: "motivational", label: "Motivational" },
-  { key: "planner", label: "Planner" },
+  { key: "luxury", label: "Luxury" },
 ];
 
 const LENGTHS: { key: ResponseLength; label: string }[] = [
@@ -146,7 +145,7 @@ export default function SettingsScreen() {
 
         {/* About */}
         <View style={styles.about}>
-          <Text style={styles.aboutText}>Mo · Executive Assistant</Text>
+          <Text style={styles.aboutText}>Mo</Text>
           <Text style={styles.aboutVersion}>Version 1.0</Text>
         </View>
       </ScrollView>

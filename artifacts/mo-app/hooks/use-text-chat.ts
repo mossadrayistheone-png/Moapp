@@ -59,14 +59,11 @@ interface UseTextChatReturn {
   resetChat: () => void;
 }
 
-// Map app modes to API-accepted mode strings
+// Mode IDs match the server's MODE_PROMPTS keys directly.
 const API_MODE: Record<string, string> = {
-  daily:       "planner",
-  executive:   "executive",
-  luxury:      "creative",
-  creative:    "creative",
-  motivational:"motivational",
-  planner:     "planner",
+  daily:     "daily",
+  executive: "executive",
+  luxury:    "luxury",
 };
 
 export function useTextChat({ onComplete }: UseTextChatOptions): UseTextChatReturn {

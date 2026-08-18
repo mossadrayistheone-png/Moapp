@@ -58,7 +58,7 @@ export type AssistantState =
   | "thinking"
   | "speaking"
   | "error";
-export type AssistantMode = "executive" | "creative" | "motivational" | "planner" | "daily" | "luxury";
+export type AssistantMode = "executive" | "daily" | "luxury";
 export type ResponseLength = "short" | "medium" | "long";
 
 export interface ConversationMessage {
@@ -479,15 +479,8 @@ export function useVoice(options: UseVoiceOptions = {}) {
       fetchAbortRef.current = fetchController;
       const fetchTimeoutId = setTimeout(() => fetchController!.abort(), 28_000);
 
-      const API_MODE_MAP: Record<string, string> = {
-        daily:        "planner",
-        executive:    "executive",
-        luxury:       "creative",
-        creative:     "creative",
-        motivational: "motivational",
-        planner:      "planner",
-      };
-      const apiMode = API_MODE_MAP[mode] ?? "executive";
+      // Mode IDs match the server's MODE_PROMPTS keys directly.
+      const apiMode = mode ?? "executive";
 
       console.log("[Mo] sending request — mode:", mode, "→", apiMode);
 

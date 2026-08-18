@@ -66,6 +66,7 @@
     "expo-notifications": "^0.32.16",
     "expo-video": "^3.0.16",
     "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react-native": "0.81.5",
+    "react-native-purchases": "^10.7.1"
   }
 }

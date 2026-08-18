@@ -19,7 +19,20 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
+import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
 import { SafeNotifications } from "@/utils/notifications";
+
+// Initialise RevenueCat once at module load. If API keys are not yet
+// configured (development / pre-launch), we catch the error and set
+// revenueCatConfigured = false so the SubscriptionProvider falls back
+// to open access (no paywall shown during development).
+let revenueCatConfigured = false;
+try {
+  initializeRevenueCat();
+  revenueCatConfigured = true;
+} catch (err: any) {
+  console.warn("[RevenueCat] Not configured — paywall disabled:", err?.message ?? err);
+}
 
 let _baseUrl: string | null = null;
 function setBaseUrl(url: string | null): void {
@@ -73,6 +86,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AppProvider>
+            <SubscriptionProvider isConfigured={revenueCatConfigured}>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <StatusBar style="light" />
               <Stack screenOptions={{ headerShown: false }}>
@@ -93,6 +107,7 @@ export default function RootLayout() {
                 />
               </Stack>
             </GestureHandlerRootView>
+            </SubscriptionProvider>
           </AppProvider>
         </QueryClientProvider>
       </ErrorBoundary>

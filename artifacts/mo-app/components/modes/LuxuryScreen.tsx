@@ -24,9 +24,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { CommandCenter, type CommandCenterColors } from "@/components/CommandCenter";
+import { PaywallModal } from "@/components/PaywallModal";
 import { LUXURY_PROMPTS } from "@/constants/prompts";
 import { LuxuryTheme as T } from "@/constants/themes";
 import { useApp } from "@/context/AppContext";
+import { useSubscription } from "@/lib/revenuecat";
 import { usePromptHistory } from "@/hooks/use-prompt-history";
 import type { ChatState } from "@/hooks/use-text-chat";
 import type { AssistantState } from "@/hooks/use-voice";
@@ -134,9 +136,18 @@ export function LuxuryScreen({
 }: LuxuryScreenProps) {
   const insets = useSafeAreaInsets();
   const { preferences } = useApp();
+  const { hasLuxury, isConfigured } = useSubscription();
   const { recentPrompts, addPrompt } = usePromptHistory("luxury");
 
   const [inputText, setInputText] = useState("");
+  const [paywallVisible, setPaywallVisible] = useState(false);
+
+  // Show paywall when this screen becomes active and user lacks the entitlement.
+  useEffect(() => {
+    if (isActive && isConfigured && !hasLuxury) {
+      setPaywallVisible(true);
+    }
+  }, [isActive, isConfigured, hasLuxury]);
 
   // Fade-in the WebP background only on activation — not on every loop frame.
   const bgOpacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
@@ -376,6 +387,11 @@ export function LuxuryScreen({
           </Pressable>
         )}
       </View>
+      <PaywallModal
+        visible={paywallVisible}
+        mode="luxury"
+        onDismiss={() => setPaywallVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }

@@ -95,7 +95,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   autoplay: true,
   responseLength: "medium",
   backgroundEnabled: true,
-  defaultMode: "executive",
+  defaultMode: "daily",
 };
 
 const PREFS_KEY = "@mo:preferences";
