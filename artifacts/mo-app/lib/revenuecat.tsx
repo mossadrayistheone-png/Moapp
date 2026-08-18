@@ -77,11 +77,17 @@ export function initializeRevenueCat(): void {
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
+export type SubscriptionTier = "free" | "executive" | "luxury";
+
 interface SubscriptionContextValue {
   /** User has an active "executive" OR "luxury" entitlement. */
   hasExecutive: boolean;
   /** User has an active "luxury" entitlement specifically. */
   hasLuxury: boolean;
+  /** Computed active tier — "free" when no paid entitlement is active. */
+  activeTier: SubscriptionTier;
+  /** Expiration/renewal date of the highest active entitlement, or null. */
+  renewalDate: Date | null;
   /** RevenueCat was successfully initialised with valid API keys. */
   isConfigured: boolean;
   /** Subscription data is still loading from RevenueCat. */
@@ -128,9 +134,25 @@ function useSubscriptionContext(isConfigured: boolean): SubscriptionContextValue
   const hasLuxury    = LUXURY_ENTITLEMENT_ID    in active;
   const hasExecutive = hasLuxury || (EXECUTIVE_ENTITLEMENT_ID in active);
 
+  const activeTier: SubscriptionTier = hasLuxury
+    ? "luxury"
+    : hasExecutive
+    ? "executive"
+    : "free";
+
+  // Expiration of the highest active entitlement (null for free / no expiry info)
+  const renewalDate: Date | null = (() => {
+    const entId = hasLuxury ? LUXURY_ENTITLEMENT_ID : hasExecutive ? EXECUTIVE_ENTITLEMENT_ID : null;
+    if (!entId) return null;
+    const exp = active[entId]?.expirationDate;
+    return exp ? new Date(exp) : null;
+  })();
+
   return {
     hasExecutive,
     hasLuxury,
+    activeTier,
+    renewalDate,
     isConfigured,
     isLoading: isConfigured && (customerInfoQuery.isLoading || offeringsQuery.isLoading),
     offerings: offeringsQuery.data,

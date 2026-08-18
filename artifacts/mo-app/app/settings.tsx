@@ -3,6 +3,9 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
+  Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   SettingsChoice,
   SettingsInput,
+  SettingsNavRow,
   SettingsSection,
   SettingsToggle,
 } from "@/components/SettingsRow";
@@ -20,6 +24,7 @@ import Colors from "@/constants/colors";
 import { UtilityTheme } from "@/constants/themes";
 import { useApp, type ResponseLength } from "@/context/AppContext";
 import type { AssistantMode } from "@/hooks/use-voice";
+import { useSubscription } from "@/lib/revenuecat";
 
 const MODES: { key: AssistantMode; label: string }[] = [
   { key: "daily", label: "Daily" },
@@ -33,13 +38,51 @@ const LENGTHS: { key: ResponseLength; label: string }[] = [
   { key: "long", label: "Detailed" },
 ];
 
+const TIER_LABELS: Record<string, string> = {
+  free:      "Free",
+  executive: "Executive",
+  luxury:    "Luxury",
+};
+
+function formatRenewal(date: Date | null): string | undefined {
+  if (!date) return undefined;
+  return "Renews " + date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+async function openManageSubscriptions() {
+  const url =
+    Platform.OS === "ios"
+      ? "itms-apps://apps.apple.com/account/subscriptions"
+      : "https://play.google.com/store/account/subscriptions?package=com.mo.assistant";
+  const supported = await Linking.canOpenURL(url);
+  if (supported) Linking.openURL(url);
+}
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { preferences, updatePreferences, clearHistory } = useApp();
+  const {
+    activeTier,
+    renewalDate,
+    isConfigured,
+    isLoading: subLoading,
+    restore,
+    isRestoring,
+  } = useSubscription();
 
   const handleClearHistory = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     clearHistory();
+  };
+
+  const handleRestore = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await restore();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      // silent — RevenueCat shows its own error UI
+    }
   };
 
   return (
@@ -118,6 +161,69 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
+        {/* Subscription */}
+        <SettingsSection title="Subscription">
+          {/* Active tier badge row */}
+          <View style={[sub.row, sub.border]}>
+            <View style={sub.textBlock}>
+              <Text style={sub.label}>Plan</Text>
+              {formatRenewal(renewalDate) ? (
+                <Text style={sub.sublabel}>{formatRenewal(renewalDate)}</Text>
+              ) : null}
+            </View>
+            {subLoading && isConfigured ? (
+              <ActivityIndicator size="small" color={Colors.gold} />
+            ) : (
+              <View style={[
+                sub.badge,
+                activeTier === "luxury"    && sub.badgeLuxury,
+                activeTier === "executive" && sub.badgeExec,
+              ]}>
+                <Text style={[
+                  sub.badgeText,
+                  (activeTier === "luxury" || activeTier === "executive") && sub.badgeTextPaid,
+                ]}>
+                  {TIER_LABELS[activeTier] ?? "Free"}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Restore purchases */}
+          <Pressable
+            onPress={handleRestore}
+            disabled={isRestoring || !isConfigured}
+            style={({ pressed }) => [
+              sub.row,
+              sub.border,
+              { opacity: pressed || isRestoring || !isConfigured ? 0.5 : 1 },
+            ]}
+          >
+            <Text style={sub.label}>Restore Purchases</Text>
+            {isRestoring
+              ? <ActivityIndicator size="small" color={Colors.mutedWhite} />
+              : <Feather name="refresh-cw" size={15} color={Colors.mutedWhite} />}
+          </Pressable>
+
+          {/* Manage subscription (only when paid) */}
+          {activeTier !== "free" && isConfigured ? (
+            <SettingsNavRow
+              label="Manage Subscription"
+              sublabel="Cancel or change plan in the store"
+              onPress={openManageSubscriptions}
+              last
+            />
+          ) : (
+            <View style={sub.row}>
+              <Text style={sub.sublabel}>
+                {isConfigured
+                  ? "Upgrade to Executive or Luxury from the main screen"
+                  : "Subscriptions available in production build"}
+              </Text>
+            </View>
+          )}
+        </SettingsSection>
+
         {/* Display */}
         <SettingsSection title="Display">
           <SettingsToggle
@@ -152,6 +258,58 @@ export default function SettingsScreen() {
     </View>
   );
 }
+
+const sub = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  border: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: UtilityTheme.divider,
+  },
+  textBlock: { flex: 1, gap: 2 },
+  label: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 15,
+    color: Colors.white,
+    flex: 1,
+  },
+  sublabel: {
+    fontFamily: "DMSans_300Light",
+    fontSize: 12,
+    color: Colors.mutedWhite,
+    lineHeight: 17,
+    flex: 1,
+  },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: UtilityTheme.chipBorder,
+    backgroundColor: "transparent",
+  },
+  badgeExec: {
+    borderColor: "rgba(139,150,204,0.5)",
+    backgroundColor: "rgba(139,150,204,0.10)",
+  },
+  badgeLuxury: {
+    borderColor: "rgba(201,168,76,0.5)",
+    backgroundColor: "rgba(201,168,76,0.10)",
+  },
+  badgeText: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 13,
+    color: Colors.mutedWhite,
+  },
+  badgeTextPaid: {
+    color: Colors.gold,
+  },
+});
 
 const styles = StyleSheet.create({
   root: {
