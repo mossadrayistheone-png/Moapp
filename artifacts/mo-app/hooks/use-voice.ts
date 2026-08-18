@@ -212,8 +212,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const fillerSoundRef  = useRef<Audio.Sound | null>(null);
 
   // Playback tracking
-  const isPlayingAnswerRef  = useRef(false);
-  const playbackStartedRef  = useRef(false);
+  const isPlayingAnswerRef   = useRef(false);
+  const playbackStartedRef   = useRef(false);
+  // Safety timer: if expo-audio never starts playing within 8 s, force idle
+  // so the app never gets permanently stuck in "speaking" state.
+  const answerSafetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── expo-audio player (answer audio) ─────────────────────────────────────
   const answerPlayer       = useAudioPlayer(answerSource);
@@ -235,7 +238,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
   useEffect(() => {
     if (isPlayingAnswerRef.current && answerPlayerStatus.playing) {
       playbackStartedRef.current = true;
-      console.log("[Mo] Answer playback started");
+      console.log("[Mo] Answer playback started — clearing safety timer");
+      // Cancel the safety timeout — audio is playing normally
+      if (answerSafetyTimerRef.current) {
+        clearTimeout(answerSafetyTimerRef.current);
+        answerSafetyTimerRef.current = null;
+      }
     }
   }, [answerPlayerStatus.playing]);
 
@@ -586,11 +594,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
       if (!inflightRef.current) return;   // user tapped stop while we waited
 
       if (!answerUri) {
-        // Empty transcript / error was already handled inside apiPromise.then()
-        // If we reach here with null, just return to idle.
+        // Empty transcript / error was already handled inside apiPromise.then().
+        // Always reset inflightRef so future requests aren't blocked. State is
+        // either already "error" (apiPromise returned null early) or needs idle.
+        inflightRef.current = false;
         if (stateRef.current !== "error") {
           setStateSync("idle");
-          inflightRef.current = false;
         }
         return;
       }
@@ -599,10 +608,27 @@ export function useVoice(options: UseVoiceOptions = {}) {
       // Setting answerSource triggers useAudioPlayer to load the file.
       // Effect #3 above detects isLoaded and calls answerPlayerRef.current.play().
       // Effects #1 and #2 detect playback start and completion.
-      console.log("[Mo] Starting answer playback — setting answerSource");
+      console.log("[Mo] Starting answer playback — setting answerSource:", answerUri);
       isPlayingAnswerRef.current = true;
       playbackStartedRef.current = false;
       setAnswerSource(answerUri);
+
+      // ── Safety timeout ────────────────────────────────────────────────────
+      // If expo-audio silently fails to start (native bug or unsupported format),
+      // the playback effects never fire and the app gets permanently stuck in
+      // "speaking" state with inflightRef=true blocking all future requests.
+      // After 8 s we force idle — the text reply is still visible (hasResponse).
+      if (answerSafetyTimerRef.current) clearTimeout(answerSafetyTimerRef.current);
+      answerSafetyTimerRef.current = setTimeout(() => {
+        answerSafetyTimerRef.current = null;
+        if (isPlayingAnswerRef.current && !playbackStartedRef.current) {
+          console.warn("[Mo] Safety timeout — answer audio never started. Returning to idle. Text reply still visible.");
+          isPlayingAnswerRef.current = false;
+          inflightRef.current = false;
+          setStateSync("idle");
+          setAnswerSource(null);
+        }
+      }, 8_000);
 
     } catch (err: any) {
       fetchAbortRef.current = null;
@@ -661,6 +687,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
     isPlayingAnswerRef.current = false;
     playbackStartedRef.current = false;
 
+    if (answerSafetyTimerRef.current) {
+      clearTimeout(answerSafetyTimerRef.current);
+      answerSafetyTimerRef.current = null;
+    }
+
     inflightRef.current = false;
 
     if (resetState) {
@@ -692,6 +723,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
   // ── stopSpeaking ──────────────────────────────────────────────────────────
   const stopSpeaking = useCallback(async () => {
     console.log("[Mo] stopSpeaking");
+
+    // Cancel any pending safety timeout
+    if (answerSafetyTimerRef.current) {
+      clearTimeout(answerSafetyTimerRef.current);
+      answerSafetyTimerRef.current = null;
+    }
 
     if (fillerSoundRef.current) {
       await fillerSoundRef.current.stopAsync().catch(() => {});
