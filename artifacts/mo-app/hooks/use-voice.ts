@@ -164,12 +164,29 @@ const RECORD_DURATION_S = 4;
 
 // VAD (Voice Activity Detection) constants.
 // Metering values are in dBFS (0 = full scale, negative = quieter).
-// Levels above VAD_SPEECH_THRESHOLD_DB are treated as speech;
-// below it for VAD_SILENCE_DURATION_MS triggers early stop.
-const VAD_SPEECH_THRESHOLD_DB  = -35;   // dBFS — above this = speech detected
-const VAD_SILENCE_THRESHOLD_DB = -35;   // dBFS — below this = silence
-const VAD_SILENCE_DURATION_MS  = 600;   // ms of continuous silence → stop
-const VAD_POLL_INTERVAL_MS     = 100;   // ms between metering polls
+// Both speech-start and trailing-silence thresholds are derived each session
+// from an ambient calibration window so they are always self-consistent:
+//   sessionSilenceThreshold = clamp(ambientFloor + SILENCE_OFFSET, MIN, MAX)
+//   sessionSpeechThreshold  = sessionSilenceThreshold + SPEECH_HYSTERESIS
+// The hysteresis gap guarantees a level recognised as speech is never
+// simultaneously counted as silence, regardless of environment.
+const VAD_SILENCE_DURATION_MS      = 600;   // ms of continuous silence → stop
+const VAD_POLL_INTERVAL_MS         = 100;   // ms between metering polls
+
+// Adaptive ambient-noise calibration.
+const VAD_AMBIENT_SAMPLE_MS        = 300;   // ms of pre-speech ambient sampling
+const VAD_AMBIENT_POLL_MS          = 50;    // ms between ambient metering reads
+const VAD_AMBIENT_SILENCE_OFFSET   = 8;    // dBFS above ambient floor → silence threshold
+const VAD_SPEECH_HYSTERESIS        = 8;    // dBFS above silence threshold → speech threshold
+const VAD_SILENCE_THRESHOLD_MIN    = -50;  // quietest silence threshold (very quiet room)
+const VAD_SILENCE_THRESHOLD_MAX    = -22;  // loudest silence threshold (very noisy env)
+// Derived speech-threshold bounds follow automatically:
+//   speechMin = VAD_SILENCE_THRESHOLD_MIN + VAD_SPEECH_HYSTERESIS = -42
+//   speechMax = VAD_SILENCE_THRESHOLD_MAX + VAD_SPEECH_HYSTERESIS = -14
+
+// Static fallbacks used when calibration yields no samples (first boot, web, etc.)
+const VAD_SILENCE_THRESHOLD_DB     = -35;  // dBFS — quiet-room default
+const VAD_SPEECH_THRESHOLD_DB      = VAD_SILENCE_THRESHOLD_DB + VAD_SPEECH_HYSTERESIS; // -27 dBFS
 
 // Live transcript polling — while listening, the partial recording is uploaded
 // every LIVE_POLL_INTERVAL_MS for a best-effort rolling transcript. Android
@@ -346,6 +363,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
       await recorder.prepareToRecordAsync();
 
+      // Add the calibration window to the cap so it does not reduce usable
+      // listening time (calibration samples are taken from the first
+      // VAD_AMBIENT_SAMPLE_MS ms of the recording).
+      const recordDurationWithCalibration = RECORD_DURATION_S + VAD_AMBIENT_SAMPLE_MS / 1000;
+
       if (Platform.OS === "web") {
         // Web: no native forDuration support — use a manual fallback timer
         recorder.record();
@@ -353,14 +375,82 @@ export function useVoice(options: UseVoiceOptions = {}) {
           if (stateRef.current === "listening") {
             stopAndProcessRef.current?.();
           }
-        }, RECORD_DURATION_S * 1000);
+        }, recordDurationWithCalibration * 1000);
       } else {
-        // Native: auto-stops after RECORD_DURATION_S; statusListener fires
-        recorder.record({ forDuration: RECORD_DURATION_S });
+        // Native: auto-stops after the extended cap; statusListener fires
+        recorder.record({ forDuration: recordDurationWithCalibration });
       }
 
       recordingActive.current = true;
       console.log("[Mo] recording started — auto-stops in", RECORD_DURATION_S, "s");
+
+      // Transition to listening immediately so the status-listener guard and
+      // the post-calibration interruption check see the correct state.
+      setTranscript("");
+      setReply("");
+      setErrorMessage("");
+      setStateSync("listening");
+
+      // ── Ambient noise calibration ─────────────────────────────────────────
+      // Sample metering during the first VAD_AMBIENT_SAMPLE_MS ms of recording
+      // to measure the ambient noise floor. Both the silence threshold and the
+      // speech-start threshold are derived from that floor so they are always
+      // self-consistent and a level recognised as speech can never be
+      // simultaneously below the silence threshold.
+      //
+      // The user may start speaking immediately after tapping, so the calibration
+      // window can contain a mix of ambient and speech samples. We use the 25th
+      // percentile (P25) of the collected readings rather than the average:
+      // speech input is typically 10–20 dBFS louder than ambient noise, so the
+      // lower quartile reliably reflects the ambient floor even when half the
+      // samples are contaminated by early speech.
+      let sessionSilenceThreshold = VAD_SILENCE_THRESHOLD_DB; // quiet-room fallback
+      let sessionSpeechThreshold  = VAD_SPEECH_THRESHOLD_DB;  // fallback = silence + hysteresis
+      await new Promise<void>((resolve) => {
+        const ambientSamples: number[] = [];
+        let elapsed = 0;
+        const sampleInterval = setInterval(() => {
+          try {
+            const status = recorder.getStatus();
+            const level: number = (status as any).metering ?? (status as any).averagePower ?? -160;
+            // Only collect plausible readings (ignore -160 sentinel / no-data)
+            if (level > -160) ambientSamples.push(level);
+          } catch { /* recorder not ready yet — skip tick */ }
+          elapsed += VAD_AMBIENT_POLL_MS;
+          if (elapsed >= VAD_AMBIENT_SAMPLE_MS) {
+            clearInterval(sampleInterval);
+            if (ambientSamples.length > 0) {
+              // Sort ascending and pick P25 — the lower quartile excludes speech
+              // spikes while still capturing the true ambient floor in noisy rooms.
+              const sorted = [...ambientSamples].sort((a, b) => a - b);
+              const p25Index = Math.floor(sorted.length * 0.25);
+              const ambientFloor = sorted[p25Index] ?? sorted[0];
+              sessionSilenceThreshold = Math.max(
+                VAD_SILENCE_THRESHOLD_MIN,
+                Math.min(VAD_SILENCE_THRESHOLD_MAX, ambientFloor + VAD_AMBIENT_SILENCE_OFFSET),
+              );
+              // Speech threshold is always SPEECH_HYSTERESIS dBFS above silence
+              // threshold — guarantees no level is simultaneously "speech" and "silence".
+              sessionSpeechThreshold = sessionSilenceThreshold + VAD_SPEECH_HYSTERESIS;
+              console.log(
+                "[Mo] VAD ambient P25:", ambientFloor.toFixed(1), "dBFS →",
+                "silence:", sessionSilenceThreshold.toFixed(1), "dBFS /",
+                "speech:", sessionSpeechThreshold.toFixed(1), "dBFS",
+                "(samples:", ambientSamples.length, ")",
+              );
+            } else {
+              console.log(
+                "[Mo] VAD ambient calibration — no samples, using defaults:",
+                "silence:", sessionSilenceThreshold, "/ speech:", sessionSpeechThreshold, "dBFS",
+              );
+            }
+            resolve();
+          }
+        }, VAD_AMBIENT_POLL_MS);
+      });
+
+      // Bail out early if the recording was interrupted during calibration
+      if (!recordingActive.current || stateRef.current !== "listening") return;
 
       // ── VAD polling ───────────────────────────────────────────────────────
       // Poll metering every VAD_POLL_INTERVAL_MS. Once speech is detected
@@ -393,17 +483,19 @@ export function useVoice(options: UseVoiceOptions = {}) {
           setMicLevel(normalised);
 
           if (!speechDetected) {
-            if (level > VAD_SPEECH_THRESHOLD_DB) {
+            if (level > sessionSpeechThreshold) {
               speechDetected = true;
               silenceMs = 0;
-              console.log("[Mo] VAD — speech detected, level:", level.toFixed(1), "dBFS");
+              console.log("[Mo] VAD — speech detected, level:", level.toFixed(1), "dBFS (threshold:", sessionSpeechThreshold.toFixed(1), ")");
             }
             // Haven't heard speech yet — reset silence counter and wait
             return;
           }
 
-          // Speech was detected: track silence duration
-          if (level < VAD_SILENCE_THRESHOLD_DB) {
+          // Speech was detected: track silence duration.
+          // sessionSilenceThreshold < sessionSpeechThreshold (guaranteed by calibration),
+          // so a level above the silence threshold always re-sets the counter correctly.
+          if (level < sessionSilenceThreshold) {
             silenceMs += VAD_POLL_INTERVAL_MS;
             if (silenceMs >= VAD_SILENCE_DURATION_MS) {
               console.log("[Mo] VAD — silence for", silenceMs, "ms — triggering early stop");
@@ -473,11 +565,6 @@ export function useVoice(options: UseVoiceOptions = {}) {
           }
         }, LIVE_POLL_INTERVAL_MS);
       }
-
-      setTranscript("");
-      setReply("");
-      setErrorMessage("");
-      setStateSync("listening");
 
     } catch (err) {
       console.error("[Mo] startRecording FAILED:", err);
