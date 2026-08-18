@@ -4,3 +4,4 @@
 - [expo-audio recording migration](expo-audio-migration.md) — expo-av Audio.Recording produces 3-byte empty files on New Architecture; use expo-audio useAudioRecorder instead. API names differ (allowsRecording, playsInSilentMode, etc).
 - [Answer audio playback](answer-audio-playback.md) — never play TTS answers from file:// on Android/Fabric; stream https URL with data-URI fallback.
 - [Animated WebP backgrounds](animated-webp-backgrounds.md) — expo-image required (not RN Image) for animated WebP; ffmpeg needs -loop 0 for infinite loop; active-only loading + key swap prevents freeze-on-scroll.
+- [RevenueCat project structure](revenuecat-project.md) — Mo project IDs, app IDs, product IDs, entitlement IDs, and API key secrets; correct API endpoints for attach operations.
