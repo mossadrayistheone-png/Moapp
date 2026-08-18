@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { CommandCenter, type CommandCenterColors } from "@/components/CommandCenter";
+import { ListeningPulse } from "@/components/ListeningPulse";
 import { WaveformBars } from "@/components/WaveformBars";
 import { DAILY_PROMPTS } from "@/constants/prompts";
 import { DailyTheme as T } from "@/constants/themes";
@@ -368,9 +369,13 @@ export function DailyScreen({
             ) : (
               <View style={s.voicePulse} />
             )}
-            <Text style={s.voiceStateText} numberOfLines={1}>
-              {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
-            </Text>
+            {voiceState === "listening" && !liveTranscript && Platform.OS === "android" ? (
+              <ListeningPulse color={T.accent} />
+            ) : (
+              <Text style={s.voiceStateText} numberOfLines={1}>
+                {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
+              </Text>
+            )}
           </View>
         ) : (
           <TextInput

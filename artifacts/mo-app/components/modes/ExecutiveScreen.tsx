@@ -25,6 +25,7 @@ import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { Feather } from "@expo/vector-icons";
 import { CommandCenter, type CommandCenterColors } from "@/components/CommandCenter";
+import { ListeningPulse } from "@/components/ListeningPulse";
 import { PaywallModal } from "@/components/PaywallModal";
 import { WaveformBars } from "@/components/WaveformBars";
 import { EXECUTIVE_PROMPTS } from "@/constants/prompts";
@@ -407,9 +408,13 @@ export function ExecutiveScreen({
             ) : (
               <View style={s.voiceActiveDot} />
             )}
-            <Text style={s.voiceStateText} numberOfLines={1}>
-              {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
-            </Text>
+            {voiceState === "listening" && !liveTranscript && Platform.OS === "android" ? (
+              <ListeningPulse color={T.accent} />
+            ) : (
+              <Text style={s.voiceStateText} numberOfLines={1}>
+                {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
+              </Text>
+            )}
           </View>
         ) : (
           <TextInput

@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Line, Path, Rect } from "react-native-svg";
 
 import { CommandCenter, type CommandCenterColors } from "@/components/CommandCenter";
+import { ListeningPulse } from "@/components/ListeningPulse";
 import { PaywallModal } from "@/components/PaywallModal";
 import { WaveformBars } from "@/components/WaveformBars";
 import { LUXURY_PROMPTS } from "@/constants/prompts";
@@ -377,9 +378,13 @@ export function LuxuryScreen({
             ) : (
               <Text style={s.voiceInputGold}>◆</Text>
             )}
-            <Text style={s.voiceStateText} numberOfLines={1}>
-              {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
-            </Text>
+            {voiceState === "listening" && !liveTranscript && Platform.OS === "android" ? (
+              <ListeningPulse color={T.accent} />
+            ) : (
+              <Text style={s.voiceStateText} numberOfLines={1}>
+                {voiceState === "listening" && liveTranscript ? liveTranscript : voiceStatusLabel}
+              </Text>
+            )}
           </View>
         ) : (
           <TextInput
