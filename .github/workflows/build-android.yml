@@ -75,15 +75,21 @@ jobs:
         run: echo "sdk.dir=$ANDROID_HOME" > artifacts/mo-app/android/local.properties
 
       # 9. Build APK with Gradle
+      #    -Pandroid.injected.build.abi=arm64-v8a  → only build for arm64 (S24 Ultra).
+      #    Cuts the APK from ~124 MB to ~55-65 MB by dropping x86/armeabi-v7a libs.
       - name: Build APK
         working-directory: artifacts/mo-app/android
         env:
           EXPO_PUBLIC_DOMAIN: ${{ inputs.domain || secrets.EXPO_PUBLIC_DOMAIN }}
         run: |
           if [ "${{ inputs.variant }}" = "debug" ]; then
-            ./gradlew :app:assembleDebug --no-daemon
+            ./gradlew :app:assembleDebug \
+              -Pandroid.injected.build.abi=arm64-v8a \
+              --no-daemon
           else
-            ./gradlew :app:assembleRelease --no-daemon
+            ./gradlew :app:assembleRelease \
+              -Pandroid.injected.build.abi=arm64-v8a \
+              --no-daemon
           fi
 
       # 10. Locate and rename APK for a consistent filename
