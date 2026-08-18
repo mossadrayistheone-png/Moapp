@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Line, Path, Rect } from "react-native-svg";
 
+import { Feather } from "@expo/vector-icons";
 import { CommandCenter, type CommandCenterColors } from "@/components/CommandCenter";
 import { PaywallModal } from "@/components/PaywallModal";
 import { WaveformBars } from "@/components/WaveformBars";
@@ -32,7 +33,7 @@ import { useApp } from "@/context/AppContext";
 import { useSubscription } from "@/lib/revenuecat";
 import { usePromptHistory } from "@/hooks/use-prompt-history";
 import type { ChatState } from "@/hooks/use-text-chat";
-import type { AssistantState } from "@/hooks/use-voice";
+import type { AssistantState, DayPlan, PlanBlock } from "@/hooks/use-voice";
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -112,6 +113,40 @@ const CC_COLORS: CommandCenterColors = {
   promptArrow:   T.accent,
 };
 
+// ── Day Plan Card ─────────────────────────────────────────────────────────────
+
+function DayPlanCard({ plan }: { plan: DayPlan }) {
+  const [collapsed, setCollapsed] = React.useState(false);
+  const TIMEFRAME: Record<DayPlan["timeframe"], string> = {
+    morning: "Morning", afternoon: "Afternoon", evening: "Evening", full_day: "Full Day",
+  };
+  return (
+    <View style={s.planCard}>
+      <Pressable onPress={() => setCollapsed(c => !c)} style={s.planHeader}>
+        <View style={s.planHeaderLeft}>
+          <Text style={s.planLabel}>DAY PLAN</Text>
+          <Text style={s.planTitle}>{plan.title}</Text>
+          <Text style={s.planTimeframe}>{TIMEFRAME[plan.timeframe]}</Text>
+        </View>
+        <Feather name={collapsed ? "chevron-down" : "chevron-up"} size={15} color={T.textSub} />
+      </Pressable>
+      {!collapsed && (
+        <View style={s.planBlocks}>
+          {plan.blocks.map((block: PlanBlock, i: number) => (
+            <View key={i} style={[s.planBlock, i < plan.blocks.length - 1 && s.planBlockBorder]}>
+              {block.time ? <Text style={s.blockTime}>{block.time}</Text> : null}
+              <View style={s.blockContent}>
+                <Text style={s.blockTitle}>{block.title}</Text>
+                {block.description ? <Text style={s.blockDesc}>{block.description}</Text> : null}
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface ExecutiveScreenProps {
@@ -126,6 +161,8 @@ export interface ExecutiveScreenProps {
   chatReply: string;
   chatError: string;
   onSubmitText: (text: string) => void;
+  onRetry?: () => void;
+  dayPlan?: import("@/hooks/use-voice").DayPlan | null;
   width: number;
   height: number;
   isActive?: boolean;
@@ -135,7 +172,7 @@ export interface ExecutiveScreenProps {
 
 export function ExecutiveScreen({
   voiceState, transcript, liveTranscript = "", reply, errorMessage, micLevel, onToggle,
-  chatState, chatReply, chatError, onSubmitText,
+  chatState, chatReply, chatError, onSubmitText, onRetry, dayPlan,
   width, height, isActive = false,
 }: ExecutiveScreenProps) {
   const insets = useSafeAreaInsets();
@@ -155,19 +192,22 @@ export function ExecutiveScreen({
 
   // Fade-in the WebP background only on activation — not on every loop frame.
   const bgOpacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  const bgAnim = useRef<ReturnType<typeof Animated.timing> | null>(null);
   useEffect(() => {
+    bgAnim.current?.stop();
     if (isActive) {
       bgOpacity.setValue(0);
-      Animated.timing(bgOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      bgAnim.current = Animated.timing(bgOpacity, { toValue: 1, duration: 400, useNativeDriver: true });
     } else {
-      bgOpacity.setValue(0);
+      bgAnim.current = Animated.timing(bgOpacity, { toValue: 0, duration: 300, useNativeDriver: true });
     }
+    bgAnim.current.start();
   }, [isActive]);
 
   const isVoiceActive = voiceState !== "idle" && voiceState !== "error";
   const isChatActive  = chatState === "loading" || chatState === "done";
   const hasResponse   = isChatActive || isVoiceActive || chatState === "error"
-                        || !!reply || !!chatReply;
+                        || voiceState === "error" || !!reply || !!chatReply;
 
   const replyFade = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -288,7 +328,14 @@ export function ExecutiveScreen({
             ) : null}
 
             {(errorMessage || chatError) ? (
-              <Text style={s.errorText}>{errorMessage || chatError}</Text>
+              <View style={s.errorBlock}>
+                <Text style={s.errorText}>{errorMessage || chatError}</Text>
+                {onRetry ? (
+                  <Pressable onPress={onRetry} style={s.retryBtn}>
+                    <Text style={s.retryText}>Try Again</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
 
             {(chatState === "done" || voiceState === "idle") && (chatReply || reply) ? (
@@ -305,6 +352,9 @@ export function ExecutiveScreen({
             ) : null}
           </View>
         )}
+
+        {/* ── Day Plan (persists independently of response card) ── */}
+        {dayPlan ? <DayPlanCard plan={dayPlan} /> : null}
 
         {/* ── Idle discovery state ── */}
         {!hasResponse && (
@@ -457,6 +507,33 @@ const s = StyleSheet.create({
   aiReply: { fontFamily: "DMSans_400Regular", fontSize: 15, color: T.text, lineHeight: 24 },
   thinkingText: { fontFamily: "DMSans_400Regular", fontSize: 13, color: T.textSub, fontStyle: "italic" },
   errorText: { fontFamily: "DMSans_400Regular", fontSize: 13, color: T.danger, lineHeight: 19 },
+  errorBlock: { gap: 8 },
+  retryBtn: {
+    alignSelf: "flex-start" as const, paddingHorizontal: 16, paddingVertical: 7,
+    borderRadius: 6, borderWidth: 1, borderColor: T.danger,
+    backgroundColor: "rgba(248,113,113,0.08)",
+  },
+  retryText: { fontFamily: "DMSans_500Medium", fontSize: 13, color: T.danger },
+  // Day Plan card
+  planCard: {
+    backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 12,
+    borderWidth: 1, borderColor: T.divider, overflow: "hidden" as const, marginBottom: 4,
+  },
+  planHeader: {
+    flexDirection: "row" as const, alignItems: "flex-start" as const,
+    justifyContent: "space-between" as const, padding: 16, gap: 12,
+  },
+  planHeaderLeft: { flex: 1, gap: 3 },
+  planLabel: { fontFamily: "DMSans_500Medium", fontSize: 9, color: T.accent, letterSpacing: 3.5 },
+  planTitle: { fontFamily: "CormorantGaramond_500Medium", fontSize: 19, color: T.text, lineHeight: 24 },
+  planTimeframe: { fontFamily: "DMSans_300Light", fontSize: 11, color: T.textSub },
+  planBlocks: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.divider },
+  planBlock: { flexDirection: "row" as const, padding: 14, paddingHorizontal: 16, gap: 12, alignItems: "flex-start" as const },
+  planBlockBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.divider },
+  blockTime: { fontFamily: "DMSans_400Regular", fontSize: 10, color: T.accent, width: 76, paddingTop: 2, flexShrink: 0 },
+  blockContent: { flex: 1, gap: 2 },
+  blockTitle: { fontFamily: "DMSans_500Medium", fontSize: 13, color: T.text, lineHeight: 19 },
+  blockDesc: { fontFamily: "DMSans_300Light", fontSize: 12, color: T.textSub, lineHeight: 17 },
   followUpRow: { gap: 8, marginTop: 4 },
   followUpLabel: { fontFamily: "DMSans_500Medium", fontSize: 9, color: T.textMuted, letterSpacing: 3 },
   followUpChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

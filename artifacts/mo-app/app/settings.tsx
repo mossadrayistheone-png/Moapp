@@ -249,6 +249,17 @@ export default function SettingsScreen() {
 
         {/* Data */}
         <SettingsSection title="Privacy">
+          <SettingsNavRow
+            label="Privacy Policy"
+            sublabel="How Mo handles your data"
+            onPress={() => {
+              const domain = process.env.EXPO_PUBLIC_DOMAIN;
+              const url = domain
+                ? `https://${domain}/privacy-policy.html`
+                : "https://mo.app/privacy-policy";
+              Linking.openURL(url).catch(() => {});
+            }}
+          />
           <Pressable
             onPress={handleClearHistory}
             style={({ pressed }) => [

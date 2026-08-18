@@ -40,6 +40,7 @@ import {
   type TaskActionPayload,
 } from "@/hooks/use-voice";
 
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const { width: W, height: H } = Dimensions.get("window");
@@ -58,6 +59,9 @@ export default function HomeScreen() {
   const scrollRef = useRef<any>(null);
   const scrollX = useRef(new Animated.Value(DEFAULT_PAGE * W)).current;
   const [activePage, setActivePage] = useState(DEFAULT_PAGE);
+
+  // ── Day plan state (Executive mode) ──
+  const [dayPlan, setDayPlan] = useState<DayPlan | null>(null);
 
   // ── App state ──
   const {
@@ -130,8 +134,8 @@ export default function HomeScreen() {
     onMemoryAction:   handleMemoryAction,
     onReminderAction: handleReminderAction,
     onTaskAction:     handleTaskAction,
-    onPlan: useCallback((_plan: DayPlan) => {
-      // Plan cards handled per-mode in future; ignored for now
+    onPlan: useCallback((plan: DayPlan) => {
+      setDayPlan(plan);
     }, []),
     onTurnComplete: useCallback(
       (transcript: string, reply: string) => addToHistory(transcript, reply),
@@ -151,6 +155,7 @@ export default function HomeScreen() {
       if (tools?.reminderAction) handleReminderAction(tools.reminderAction);
       if (tools?.memoryAction)   handleMemoryAction(tools.memoryAction);
       if (tools?.taskAction)     handleTaskAction(tools.taskAction);
+      if (tools?.plan)           setDayPlan({ ...(tools.plan as DayPlan), generatedAt: Date.now() });
     },
     [addToHistory, handleNote, handleNoteAction, handleReminder, handleReminderAction, handleMemoryAction, handleTaskAction]
   );
@@ -176,6 +181,15 @@ export default function HomeScreen() {
   const { chatState, chatReply, chatError, submitText, resetChat } = useTextChat({
     onComplete: onChatComplete,
   });
+
+  // ── Retry: re-initiate voice for voice errors, clear chat for chat errors ──
+  const handleRetry = useCallback(() => {
+    if (chatState === "error") {
+      resetChat();
+    } else {
+      toggle();
+    }
+  }, [chatState, resetChat, toggle]);
 
   // ── Refs for context (avoid stale closures in submitText) ──
   const ctxRef = useRef({
@@ -245,6 +259,7 @@ export default function HomeScreen() {
     errorMessage,
     micLevel,
     onToggle:      toggle,
+    onRetry:       handleRetry,
     chatState,
     chatReply,
     chatError,
@@ -275,7 +290,7 @@ export default function HomeScreen() {
         style={styles.scrollView}
       >
         {/* Page 0 — Executive */}
-        <ExecutiveScreen {...voiceProps} onSubmitText={submitExecutive} isActive={activePage === 0} />
+        <ExecutiveScreen {...voiceProps} onSubmitText={submitExecutive} isActive={activePage === 0} dayPlan={dayPlan} />
 
         {/* Page 1 — Daily (default) */}
         <DailyScreen {...voiceProps} onSubmitText={submitDaily} isActive={activePage === 1} />

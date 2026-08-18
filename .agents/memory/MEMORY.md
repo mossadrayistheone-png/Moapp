@@ -6,3 +6,6 @@
 - [Animated WebP backgrounds](animated-webp-backgrounds.md) — expo-image required (not RN Image) for animated WebP; ffmpeg needs -loop 0 for infinite loop; active-only loading + key swap prevents freeze-on-scroll.
 - [Live transcript via ADTS partial reads](live-transcript-adts.md) — Android records ADTS AAC so partial files decode mid-write for live captions; api-zod generated schemas are ahead of openapi.yaml — don't re-run codegen blindly.
 - [RevenueCat project structure](revenuecat-project.md) — Mo project IDs, app IDs, product IDs, entitlement IDs, and API key secrets; correct API endpoints for attach operations.
+- [expo-audio permissions API](expo-audio-migration.md) — use `requestRecordingPermissionsAsync()` (top-level import) not `audioRecorder.requestPermissionsAsync()` which doesn't exist.
+- [Onboarding + privacy policy](onboarding-privacy.md) — OnboardingScreen in components/ (not app/), checked via AsyncStorage @mo/onboarding_complete in _layout.tsx overlay; privacy-policy.html served from api-server/public/ at /privacy-policy.html.
+- [Background fade animation](animated-webp-backgrounds.md) — when going inactive, animate opacity to 0 (duration 300ms) instead of setValue(0); cancel previous animation with a ref before starting new one to prevent flicker on fast swipes.

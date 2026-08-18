@@ -8,11 +8,13 @@ import {
   DMSans_400Regular,
   DMSans_500Medium,
 } from "@expo-google-fonts/dm-sans";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -20,6 +22,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
 import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
+import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { SafeNotifications } from "@/utils/notifications";
 
 // Initialise RevenueCat once at module load. If API keys are not yet
@@ -60,6 +63,26 @@ SafeNotifications.setNotificationHandler({
 });
 
 export default function RootLayout() {
+  // null = still checking AsyncStorage; true = show onboarding; false = skip
+  const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem("@mo/onboarding_complete")
+      .then((val) => setShowOnboarding(val === null))
+      .catch(() => setShowOnboarding(false));
+  }, []);
+
+  const handleOnboardingComplete = async (name?: string) => {
+    if (name) await AsyncStorage.setItem("@mo/user_name", name).catch(() => {});
+    await AsyncStorage.setItem("@mo/onboarding_complete", "1").catch(() => {});
+    setShowOnboarding(false);
+  };
+
+  const handleOnboardingSkip = async () => {
+    await AsyncStorage.setItem("@mo/onboarding_complete", "1").catch(() => {});
+    setShowOnboarding(false);
+  };
+
   const [fontsLoaded, fontError] = useFonts({
     CormorantGaramond_400Regular,
     CormorantGaramond_400Regular_Italic,
@@ -79,7 +102,8 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) return null;
+  // Wait for fonts AND onboarding check before rendering anything
+  if ((!fontsLoaded && !fontError) || showOnboarding === null) return null;
 
   return (
     <SafeAreaProvider>
@@ -106,6 +130,15 @@ export default function RootLayout() {
                   }}
                 />
               </Stack>
+              {/* Onboarding overlay — shown only on first launch */}
+              {showOnboarding && (
+                <View style={StyleSheet.absoluteFillObject}>
+                  <OnboardingScreen
+                    onComplete={handleOnboardingComplete}
+                    onSkip={handleOnboardingSkip}
+                  />
+                </View>
+              )}
             </GestureHandlerRootView>
             </SubscriptionProvider>
           </AppProvider>

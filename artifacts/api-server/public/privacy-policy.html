@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Mo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: #0a0a0a;
+      color: #e8e4dc;
+      line-height: 1.7;
+      padding: 0 0 60px;
+    }
+    .header {
+      background: linear-gradient(180deg, #0a0a0a 0%, #111008 100%);
+      border-bottom: 1px solid rgba(201,168,76,0.15);
+      padding: 48px 24px 36px;
+      text-align: center;
+    }
+    .brand {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 48px;
+      font-style: italic;
+      color: #c9a84c;
+      letter-spacing: 4px;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .brand-sub {
+      font-size: 11px;
+      color: rgba(232,228,220,0.4);
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+    .doc-title {
+      font-size: 13px;
+      color: rgba(201,168,76,0.6);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-top: 24px;
+    }
+    .updated {
+      font-size: 12px;
+      color: rgba(232,228,220,0.3);
+      margin-top: 6px;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 40px 24px 0;
+    }
+    h2 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 22px;
+      font-weight: normal;
+      color: #c9a84c;
+      margin: 40px 0 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(201,168,76,0.12);
+    }
+    h2:first-of-type { margin-top: 0; }
+    p { color: rgba(232,228,220,0.78); margin: 12px 0; font-size: 15px; }
+    ul { margin: 10px 0 10px 20px; }
+    li { color: rgba(232,228,220,0.72); margin: 6px 0; font-size: 15px; }
+    a { color: #c9a84c; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .highlight {
+      background: rgba(201,168,76,0.06);
+      border-left: 2px solid rgba(201,168,76,0.3);
+      padding: 14px 16px;
+      border-radius: 0 6px 6px 0;
+      margin: 16px 0;
+    }
+    .highlight p { margin: 0; font-size: 14px; color: rgba(232,228,220,0.65); }
+    .footer {
+      text-align: center;
+      margin-top: 60px;
+      padding: 0 24px;
+    }
+    .footer p { font-size: 12px; color: rgba(232,228,220,0.25); }
+    @media (prefers-color-scheme: light) {
+      body { background: #faf9f7; color: #1a1a1a; }
+      .header { background: #faf9f7; border-bottom-color: rgba(139,110,40,0.15); }
+      .brand { color: #8b6e28; }
+      .brand-sub { color: rgba(26,26,26,0.4); }
+      .doc-title { color: rgba(139,110,40,0.7); }
+      .updated { color: rgba(26,26,26,0.3); }
+      h2 { color: #8b6e28; border-bottom-color: rgba(139,110,40,0.12); }
+      p { color: rgba(26,26,26,0.78); }
+      li { color: rgba(26,26,26,0.72); }
+      a { color: #8b6e28; }
+      .highlight { background: rgba(139,110,40,0.06); border-left-color: rgba(139,110,40,0.3); }
+      .highlight p { color: rgba(26,26,26,0.65); }
+      .footer p { color: rgba(26,26,26,0.25); }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="brand">Mo.</span>
+    <div class="brand-sub">Luxury AI Assistant</div>
+    <div class="doc-title">Privacy Policy</div>
+    <div class="updated">Last updated: August 2026</div>
+  </div>
+
+  <div class="container">
+
+    <h2>Overview</h2>
+    <p>Mo is a voice-powered AI assistant designed around privacy by default. We collect only what is necessary to deliver the service, we do not sell your data, and personal content such as notes, tasks, and memories is stored on your device.</p>
+    <div class="highlight">
+      <p>Mo is operated as an independent application. If you have questions about this policy, please contact us at the address listed at the bottom of this page.</p>
+    </div>
+
+    <h2>Information We Process</h2>
+    <p>When you use Mo's voice feature, your spoken audio is captured on-device and sent over a secure connection to our servers for processing. We use this audio to:</p>
+    <ul>
+      <li>Transcribe your speech into text (via OpenAI Whisper)</li>
+      <li>Generate an AI response using OpenAI's language models</li>
+      <li>Convert the response to speech using ElevenLabs text-to-speech</li>
+    </ul>
+    <p><strong>Audio recordings are not stored.</strong> They are processed in real time and discarded immediately after transcription. We do not retain recordings on our servers.</p>
+
+    <h2>Content You Create</h2>
+    <p>Notes, tasks, reminders, and personal memories you create through Mo are stored locally on your device using AsyncStorage. This data does not leave your device unless explicitly sent to our servers as context for an AI request (e.g., to help Mo plan your day or follow up on a reminder).</p>
+    <p>When sent as AI context, this content is included in the request payload to OpenAI and is governed by <a href="https://openai.com/privacy" target="_blank" rel="noopener">OpenAI's privacy policy</a>. OpenAI does not use API data to train their models.</p>
+
+    <h2>Third-Party Services</h2>
+    <p>Mo uses the following third-party services to operate:</p>
+    <ul>
+      <li><strong>OpenAI</strong> — transcription and AI response generation. <a href="https://openai.com/privacy" target="_blank" rel="noopener">Privacy Policy</a></li>
+      <li><strong>ElevenLabs</strong> — text-to-speech synthesis. <a href="https://elevenlabs.io/privacy" target="_blank" rel="noopener">Privacy Policy</a></li>
+      <li><strong>RevenueCat</strong> — subscription management and billing. RevenueCat may collect device identifiers and purchase history to manage entitlements. <a href="https://www.revenuecat.com/privacy" target="_blank" rel="noopener">Privacy Policy</a></li>
+      <li><strong>Google Play / Apple App Store</strong> — payment processing for subscriptions. Your payment details are handled directly by the respective app store and are never seen by Mo.</li>
+    </ul>
+
+    <h2>Subscriptions &amp; Billing</h2>
+    <p>Mo offers optional paid subscriptions (Executive and Luxury tiers). Subscriptions are processed entirely through Google Play or the Apple App Store. Mo does not collect, store, or have access to your payment card information.</p>
+    <p>RevenueCat is used to verify subscription status and entitlements. It may store a pseudonymous user identifier and your purchase history. You can manage or cancel subscriptions at any time through your device's subscription settings.</p>
+
+    <h2>Microphone Access</h2>
+    <p>Mo requests microphone permission to enable voice input. Audio is captured only when you tap the microphone button and stop being captured when you release it or Mo detects a pause in speech. Mo does not listen passively in the background.</p>
+    <p>You can revoke microphone permission at any time in your device's Settings app. Without microphone access, text input is still available.</p>
+
+    <h2>Notifications</h2>
+    <p>Mo may request permission to send local notifications for reminders you create. These notifications are scheduled on-device and do not require an internet connection. Mo does not send remote or marketing notifications.</p>
+
+    <h2>Children's Privacy</h2>
+    <p>Mo is not intended for use by children under the age of 13 (or the applicable minimum age in your jurisdiction). We do not knowingly collect personal information from children. If you believe a child has provided personal information through Mo, please contact us and we will delete it promptly.</p>
+
+    <h2>Data Retention &amp; Deletion</h2>
+    <p>Content stored on your device (notes, tasks, memories, conversation history) can be cleared at any time from Settings → Privacy → Clear conversation memory. Deleting the app from your device removes all locally stored data.</p>
+    <p>Server-side request logs (which do not include audio recordings) are retained for up to 30 days for security and reliability purposes and then automatically deleted.</p>
+
+    <h2>Your Rights</h2>
+    <p>Depending on your location, you may have rights including the right to access, correct, or delete personal data we hold about you. Because most of Mo's data lives on your device, you can exercise these rights directly through the app or by deleting the app.</p>
+    <p>For any data processed on our servers, you may contact us at the address below to request access, correction, or deletion.</p>
+
+    <h2>Changes to This Policy</h2>
+    <p>We may update this privacy policy from time to time. When we do, we will update the "Last updated" date above. Continued use of Mo after changes constitutes acceptance of the updated policy. We encourage you to review this page periodically.</p>
+
+    <h2>Contact</h2>
+    <p>If you have questions or concerns about this privacy policy or your personal data, please contact us:</p>
+    <p>
+      <strong>Mo — Luxury AI Assistant</strong><br />
+      <a href="mailto:privacy@mo.app">privacy@mo.app</a>
+    </p>
+
+  </div>
+
+  <div class="footer">
+    <p>Mo &mdash; Luxury AI Assistant &mdash; &copy; 2026</p>
+  </div>
+</body>
+</html>

@@ -127,6 +127,7 @@ export interface DailyScreenProps {
   chatReply: string;
   chatError: string;
   onSubmitText: (text: string) => void;
+  onRetry?: () => void;
   width: number;
   height: number;
   isActive?: boolean;
@@ -136,7 +137,7 @@ export interface DailyScreenProps {
 
 export function DailyScreen({
   voiceState, transcript, liveTranscript = "", reply, errorMessage, micLevel, onToggle,
-  chatState, chatReply, chatError, onSubmitText,
+  chatState, chatReply, chatError, onSubmitText, onRetry,
   width, height, isActive = false,
 }: DailyScreenProps) {
   const insets = useSafeAreaInsets();
@@ -152,19 +153,22 @@ export function DailyScreen({
   // black first-frame decode flash. When leaving, reset instantly so the
   // next arrival starts from 0.
   const bgOpacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  const bgAnim = useRef<ReturnType<typeof Animated.timing> | null>(null);
   useEffect(() => {
+    bgAnim.current?.stop();
     if (isActive) {
       bgOpacity.setValue(0);
-      Animated.timing(bgOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      bgAnim.current = Animated.timing(bgOpacity, { toValue: 1, duration: 400, useNativeDriver: true });
     } else {
-      bgOpacity.setValue(0);
+      bgAnim.current = Animated.timing(bgOpacity, { toValue: 0, duration: 300, useNativeDriver: true });
     }
+    bgAnim.current.start();
   }, [isActive]);
 
   const isVoiceActive = voiceState !== "idle" && voiceState !== "error";
   const isChatActive  = chatState === "loading" || chatState === "done";
   const hasResponse   = isChatActive || isVoiceActive || chatState === "error"
-                        || !!reply || !!chatReply;
+                        || voiceState === "error" || !!reply || !!chatReply;
 
   // Fade-in for AI reply
   const replyFade = useRef(new Animated.Value(0)).current;
@@ -288,7 +292,14 @@ export function DailyScreen({
             ) : null}
 
             {(errorMessage || chatError) ? (
-              <Text style={s.errorText}>{errorMessage || chatError}</Text>
+              <View style={s.errorBlock}>
+                <Text style={s.errorText}>{errorMessage || chatError}</Text>
+                {onRetry ? (
+                  <Pressable onPress={onRetry} style={s.retryBtn}>
+                    <Text style={s.retryText}>Try Again</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
 
             {/* Follow-up suggestions */}
@@ -460,6 +471,13 @@ const s = StyleSheet.create({
   aiReply: { fontFamily: "DMSans_400Regular", fontSize: 16, color: T.text, lineHeight: 25 },
   thinkingText: { fontFamily: "DMSans_400Regular", fontSize: 14, color: T.textSub, fontStyle: "italic" },
   errorText: { fontFamily: "DMSans_400Regular", fontSize: 13, color: T.danger, lineHeight: 19 },
+  errorBlock: { gap: 8 },
+  retryBtn: {
+    alignSelf: "flex-start" as const, paddingHorizontal: 16, paddingVertical: 7,
+    borderRadius: 8, borderWidth: 1, borderColor: T.danger,
+    backgroundColor: "rgba(239,68,68,0.07)",
+  },
+  retryText: { fontFamily: "DMSans_500Medium", fontSize: 13, color: T.danger },
   followUpRow: { gap: 8, marginTop: 4 },
   followUpLabel: { fontFamily: "DMSans_500Medium", fontSize: 9, color: T.textMuted, letterSpacing: 2.5 },
   followUpChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

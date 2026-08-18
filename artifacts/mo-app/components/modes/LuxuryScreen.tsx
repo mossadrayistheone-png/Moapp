@@ -125,6 +125,7 @@ export interface LuxuryScreenProps {
   chatReply: string;
   chatError: string;
   onSubmitText: (text: string) => void;
+  onRetry?: () => void;
   width: number;
   height: number;
   isActive?: boolean;
@@ -134,7 +135,7 @@ export interface LuxuryScreenProps {
 
 export function LuxuryScreen({
   voiceState, transcript, liveTranscript = "", reply, errorMessage, micLevel, onToggle,
-  chatState, chatReply, chatError, onSubmitText,
+  chatState, chatReply, chatError, onSubmitText, onRetry,
   width, height, isActive = false,
 }: LuxuryScreenProps) {
   const insets = useSafeAreaInsets();
@@ -154,19 +155,22 @@ export function LuxuryScreen({
 
   // Fade-in the WebP background only on activation — not on every loop frame.
   const bgOpacity = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+  const bgAnim = useRef<ReturnType<typeof Animated.timing> | null>(null);
   useEffect(() => {
+    bgAnim.current?.stop();
     if (isActive) {
       bgOpacity.setValue(0);
-      Animated.timing(bgOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+      bgAnim.current = Animated.timing(bgOpacity, { toValue: 1, duration: 400, useNativeDriver: true });
     } else {
-      bgOpacity.setValue(0);
+      bgAnim.current = Animated.timing(bgOpacity, { toValue: 0, duration: 300, useNativeDriver: true });
     }
+    bgAnim.current.start();
   }, [isActive]);
 
   const isVoiceActive = voiceState !== "idle" && voiceState !== "error";
   const isChatActive  = chatState === "loading" || chatState === "done";
   const hasResponse   = isChatActive || isVoiceActive || chatState === "error"
-                        || !!reply || !!chatReply;
+                        || voiceState === "error" || !!reply || !!chatReply;
 
   const replyFade  = useRef(new Animated.Value(0)).current;
   const replySlide = useRef(new Animated.Value(12)).current;
@@ -294,7 +298,14 @@ export function LuxuryScreen({
             ) : null}
 
             {(errorMessage || chatError) ? (
-              <Text style={s.errorText}>{errorMessage || chatError}</Text>
+              <View style={s.errorBlock}>
+                <Text style={s.errorText}>{errorMessage || chatError}</Text>
+                {onRetry ? (
+                  <Pressable onPress={onRetry} style={s.retryBtn} hitSlop={8}>
+                    <Text style={s.retryText}>Try Again</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : null}
 
             {(chatState === "done" || voiceState === "idle") && (chatReply || reply) ? (
@@ -490,7 +501,13 @@ const s = StyleSheet.create({
     fontFamily: "CormorantGaramond_400Regular_Italic", fontSize: 18,
     color: T.textSub, textAlign: "center",
   },
-  errorText: { fontFamily: "DMSans_300Light", fontSize: 13, color: T.textSub, textAlign: "center" },
+  errorText: { fontFamily: "DMSans_300Light", fontSize: 13, color: T.textSub, textAlign: "center" as const },
+  errorBlock: { gap: 10, alignItems: "center" as const },
+  retryBtn: {
+    alignSelf: "center" as const, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 2,
+    borderWidth: 1, borderColor: "rgba(201,168,76,0.35)", backgroundColor: "rgba(201,168,76,0.05)",
+  },
+  retryText: { fontFamily: "DMSans_300Light", fontSize: 12, color: "rgba(201,168,76,0.7)", letterSpacing: 2 },
   followUpRow: { gap: 10 },
   followUpDivider: { height: 0.5, backgroundColor: T.cardBorder },
   followUpLabel: { fontFamily: "DMSans_300Light", fontSize: 11, color: T.textSub, letterSpacing: 1 },

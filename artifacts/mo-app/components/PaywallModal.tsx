@@ -62,7 +62,8 @@ export function PaywallModal({ visible, mode, onDismiss }: PaywallModalProps) {
   const pkg: PurchasesPackage | undefined =
     currentOffering?.availablePackages.find((p) => p.identifier === copy.packageId);
 
-  const priceString = pkg?.product.priceString ?? "—";
+  const offeringsLoading = !offerings && !error;
+  const priceString = pkg?.product.priceString ?? (offeringsLoading ? "Loading…" : "Unavailable");
 
   const handlePurchase = async () => {
     if (!pkg) return;
@@ -133,16 +134,27 @@ export function PaywallModal({ visible, mode, onDismiss }: PaywallModalProps) {
             <Text style={styles.error}>{error}</Text>
           ) : null}
 
+          {/* Not available notice */}
+          {!pkg && !offeringsLoading ? (
+            <Text style={styles.unavailableNote}>
+              Subscription products are not available in this environment.
+              Please use a production or TestFlight build to subscribe.
+            </Text>
+          ) : null}
+
           {/* Subscribe CTA */}
           <Pressable
             onPress={handlePurchase}
-            disabled={isPurchasing || !pkg}
+            disabled={isPurchasing || !pkg || offeringsLoading}
             style={({ pressed }) => [
               styles.cta,
-              { backgroundColor: copy.color, opacity: pressed || isPurchasing ? 0.75 : 1 },
+              {
+                backgroundColor: copy.color,
+                opacity: pressed || isPurchasing || !pkg ? 0.45 : 1,
+              },
             ]}
           >
-            {isPurchasing ? (
+            {isPurchasing || offeringsLoading ? (
               <ActivityIndicator color="#000" size="small" />
             ) : (
               <Text style={styles.ctaText}>
@@ -244,6 +256,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
     marginBottom: 4,
+  },
+  unavailableNote: {
+    fontFamily: "DMSans_300Light",
+    fontSize: 12,
+    color: T.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 4,
+    paddingHorizontal: 8,
   },
   cta: {
     width: "100%",
