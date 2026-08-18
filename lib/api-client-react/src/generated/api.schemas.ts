@@ -162,9 +162,8 @@ export type ChatRequestMode =
 
 export const ChatRequestMode = {
   executive: "executive",
-  creative: "creative",
-  motivational: "motivational",
-  planner: "planner",
+  daily: "daily",
+  luxury: "luxury",
 } as const;
 
 export interface ChatRequest {
@@ -231,9 +230,8 @@ export type VoiceRequestMode =
 
 export const VoiceRequestMode = {
   executive: "executive",
-  creative: "creative",
-  motivational: "motivational",
-  planner: "planner",
+  daily: "daily",
+  luxury: "luxury",
 } as const;
 
 export interface VoiceRequest {

@@ -129,7 +129,7 @@ export const moChatBodyPreferencesResponseLengthDefault = `medium`;
 export const MoChatBody = zod.object({
   message: zod.string(),
   mode: zod
-    .enum(["executive", "creative", "motivational", "planner"])
+    .enum(["executive", "daily", "luxury"])
     .default(moChatBodyModeDefault),
   messages: zod.array(conversationMessageSchema).optional(),
   preferences: preferencesSchema.optional(),
@@ -201,7 +201,7 @@ export const MoVoiceBody = zod.object({
   audio: zod.string().describe("Base64-encoded audio file"),
   format: zod.enum(["m4a", "mp4", "wav", "caf", "aac", "webm"]).default(moVoiceBodyFormatDefault),
   mode: zod
-    .enum(["executive", "creative", "motivational", "planner"])
+    .enum(["executive", "daily", "luxury"])
     .default(moVoiceBodyModeDefault),
   messages: zod.array(conversationMessageSchema).optional(),
   preferences: preferencesSchema.optional(),

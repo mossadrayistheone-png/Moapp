@@ -266,7 +266,7 @@ components:
           type: string
         mode:
           type: string
-          enum: [executive, creative, motivational, planner]
+          enum: [executive, daily, luxury]
           default: executive
         messages:
           type: array
@@ -341,7 +341,7 @@ components:
           default: m4a
         mode:
           type: string
-          enum: [executive, creative, motivational, planner]
+          enum: [executive, daily, luxury]
           default: executive
         messages:
           type: array
