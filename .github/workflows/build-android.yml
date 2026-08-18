@@ -137,7 +137,6 @@ jobs:
           1. Download the APK below
           2. Open it on your Android device (allow installs from unknown sources)
           3. Uninstall any previous Mo build first if prompted about signature mismatch" \
-            --prerelease \
             "${{ steps.apk.outputs.path }}"
 
       # 12. Print the direct download URL
