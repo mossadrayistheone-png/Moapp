@@ -176,7 +176,7 @@ export const MoSpeakBody = zod.object({
 /**
  * @summary Full voice pipeline for native mobile
  */
-export const moVoiceBodyFormatDefault = `m4a`;
+export const moVoiceBodyFormatDefault = `aac`;
 export const moVoiceBodyModeDefault = `executive`;
 export const moVoiceBodyPreferencesResponseLengthDefault = `medium`;
 

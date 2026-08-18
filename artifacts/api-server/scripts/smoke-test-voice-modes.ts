@@ -5,6 +5,9 @@
  * modes (executive, daily, luxury) and asserts the response is NOT a 400
  * validation error.
  *
+ * Also tests the iOS ADTS AAC format path — verifies that format:"aac" is
+ * accepted by Zod and reaches the pipeline (no regression from M4A → ADTS switch).
+ *
  * Pass conditions per mode:
  *   ✓  2xx / 5xx   — request reached the voice pipeline; mode validation passed
  *   ✗  400         — Zod validation rejected the mode or body (the regression we catch)
@@ -56,6 +59,19 @@ function buildSilentWav(durationSecs = 0.25): Buffer {
 
   return buf;
 }
+
+// ── Real ADTS AAC fixture ─────────────────────────────────────────────────────
+// 0.5 s of silence encoded as ADTS AAC (AAC-LC, 16 kHz mono) by ffmpeg:
+//   ffmpeg -f lavfi -i anullsrc=r=16000:cl=mono -t 0.5 -c:a aac -f adts out.aac
+// Base64-encoded here so the test is self-contained (no runtime ffmpeg required).
+// This is a real, decodable AAC stream — ffmpeg on the server can convert it to
+// WAV and Whisper can transcribe it (returning empty text for silence). Using
+// real audio ensures a 5xx from the server means a genuine pipeline failure
+// (ffmpeg decode error or Whisper rejection), not a test fixture problem.
+const ADTS_SILENCE_B64 =
+  "//FgQAOf/N4CAExhdmM2MC4zMS4xMDIAAjBADv/xYEABf/wBGCAH//FgQAF//AEYIAf/8WBAAX" +
+  "/8ARggB//xYEABf/wBGCAH//FgQAF//AEYIAf/8WBAAX/8ARggB//xYEABf/wBGCAH//FgQAF/" +
+  "/AEYIAc=";
 
 // ── Result types ──────────────────────────────────────────────────────────────
 
@@ -128,14 +144,72 @@ async function checkMode(
   return { mode, status, passed, failReason, detail };
 }
 
+// ── iOS ADTS pipeline check ───────────────────────────────────────────────────
+// Posts a real ADTS AAC payload (0.5 s silence) to /api/mo/voice and verifies
+// the full pipeline succeeds (HTTP 200). This confirms that:
+//   1. Zod accepts format:"aac" (no 400 schema regression)
+//   2. ffmpeg can decode the ADTS stream to WAV (no 5xx decode failure)
+//   3. Whisper accepts the WAV and returns a result (empty for silence — 200 OK)
+//
+// A 5xx here means ffmpeg failed to decode ADTS or Whisper rejected the result,
+// which is a real regression — not a fixture problem — because ADTS_SILENCE_B64
+// is a known-valid, ffmpeg-generated ADTS AAC stream.
+async function checkAdtsPipeline(
+  serverUrl: string,
+): Promise<{ passed: boolean; status: number | null; detail: string }> {
+  let status: number | null = null;
+  let detail = "";
+  let passed = false;
+
+  try {
+    const res = await fetch(`${serverUrl}/api/mo/voice`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio: ADTS_SILENCE_B64, format: "aac", mode: "executive" }),
+      signal: AbortSignal.timeout(35_000),
+    });
+    status = res.status;
+
+    let bodyText = "";
+    try { bodyText = await res.text(); } catch { /* ignore */ }
+
+    let bodyError = "";
+    try { bodyError = (JSON.parse(bodyText) as { error?: string }).error ?? ""; } catch { /* ignore */ }
+
+    if (status === 200) {
+      passed = true;
+      detail = "OK — ADTS decoded by ffmpeg, Whisper accepted WAV, pipeline returned 200";
+    } else if (status === 400) {
+      detail = bodyError || '400 — Zod rejected format:"aac" (schema regression)';
+    } else if (status === 404) {
+      detail = "404 — endpoint not found; check MO_API_URL";
+    } else if (status >= 400 && status < 500) {
+      detail = bodyError || `HTTP ${status} — unexpected client error`;
+    } else {
+      // 5xx: pipeline error — ffmpeg decode failure, Whisper rejection, or timeout
+      detail = bodyError || `HTTP ${status} — server error (ffmpeg/Whisper decode failure)`;
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    detail = `Network error: ${msg}`;
+  }
+
+  return { passed, status, detail };
+}
+
 // ── Self-test ─────────────────────────────────────────────────────────────────
-// Verifies that the script correctly exits non-zero when the server is
-// unreachable or returns a 400/404. Call via: pnpm smoke-test:self-test
+// Verifies that the script correctly exits non-zero for transport failures.
+// Call via: pnpm smoke-test:self-test
+//
+// NOTE: This only tests the "unreachable server" case (no running server needed).
+// The "wrong path → 404" case is omitted here because it requires the API server
+// to be running at MO_API_URL — run the main smoke test for that coverage.
 
 async function runSelfTest(): Promise<void> {
   console.log("Mo Voice Mode — Smoke Test Self-Verification");
   console.log("═════════════════════════════════════════════");
   console.log("  Checking that failure cases are correctly detected...");
+  console.log("  (Network-only cases — no running server required.)");
   console.log();
 
   const silentWav   = buildSilentWav();
@@ -148,14 +222,6 @@ async function runSelfTest(): Promise<void> {
       mode:       "executive",
       expectFail: true,
       expectReason: "network_error",
-    },
-    {
-      label:      "wrong URL path → 404",
-      // Use the real server but a path that will never resolve
-      serverUrl:  "http://localhost:8080/nonexistent-prefix",
-      mode:       "executive",
-      expectFail: true,
-      expectReason: "not_found",
     },
   ];
 
@@ -198,9 +264,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  const serverUrl   = process.env.MO_API_URL ?? "http://localhost:8080";
-  const silentWav   = buildSilentWav();
-  const audioBase64 = silentWav.toString("base64");
+  const serverUrl = process.env.MO_API_URL ?? "http://localhost:8080";
+  const silentWav = buildSilentWav();
+  const wavBase64 = silentWav.toString("base64");
 
   console.log("Mo Voice Mode — Smoke Test");
   console.log("══════════════════════════");
@@ -213,11 +279,11 @@ async function main(): Promise<void> {
 
   for (const mode of MODES) {
     process.stdout.write(`  [${mode.padEnd(9)}]  POST /api/mo/voice ... `);
-    const result = await checkMode(serverUrl, audioBase64, mode);
+    const result = await checkMode(serverUrl, wavBase64, mode);
     results.push(result);
 
-    const icon       = result.passed ? "✓" : "✗";
-    const statusStr  = result.status != null ? String(result.status) : "---";
+    const icon      = result.passed ? "✓" : "✗";
+    const statusStr = result.status != null ? String(result.status) : "---";
     console.log(`${icon}  ${statusStr}  ${result.detail}`);
   }
 
@@ -226,48 +292,90 @@ async function main(): Promise<void> {
 
   const failed = results.filter(r => !r.passed);
 
-  if (failed.length === 0) {
-    console.log("  ✓ All modes passed validation (no 400 or transport errors).");
-    console.log();
-    process.exit(0);
+  if (failed.length > 0) {
+    // Group failures by reason for a clear diagnosis
+    const byReason = new Map<FailReason, ModeResult[]>();
+    for (const r of failed) {
+      if (!r.failReason) continue;
+      if (!byReason.has(r.failReason)) byReason.set(r.failReason, []);
+      byReason.get(r.failReason)!.push(r);
+    }
+
+    console.log(`  ✗ ${failed.length}/${results.length} mode(s) failed:\n`);
+
+    for (const [reason, items] of byReason) {
+      const hint: Record<FailReason, string> = {
+        validation_error:
+          "  Hint: mode enum in openapi.yaml or api-zod generated schema is out of\n" +
+          "        sync with the values the app sends. Check MoVoiceBody.mode in\n" +
+          "        lib/api-zod/src/generated/api.ts and lib/api-spec/openapi.yaml.",
+        not_found:
+          "  Hint: endpoint not found. Is the API server running at the right URL?\n" +
+          "        Set MO_API_URL=http://localhost:<port> if needed.",
+        unexpected_4xx:
+          "  Hint: unexpected client-side HTTP error. Check server logs for details.",
+        network_error:
+          "  Hint: could not reach the server. Start the API server first:\n" +
+          "        pnpm --filter @workspace/api-server run dev",
+      };
+
+      console.log(`  ── ${reason} ──`);
+      for (const r of items) {
+        console.log(`     ${r.mode}: ${r.detail}`);
+      }
+      console.log();
+      console.log(hint[reason]);
+      console.log();
+    }
+
+    process.exit(1);
   }
 
-  // Group failures by reason for a clear diagnosis
-  const byReason = new Map<FailReason, ModeResult[]>();
-  for (const r of failed) {
-    if (!r.failReason) continue;
-    if (!byReason.has(r.failReason)) byReason.set(r.failReason, []);
-    byReason.get(r.failReason)!.push(r);
-  }
+  console.log("  ✓ All modes passed validation (no 400 or transport errors).");
 
-  console.log(`  ✗ ${failed.length}/${results.length} mode(s) failed:\n`);
+  // ── iOS ADTS pipeline check ───────────────────────────────────────────────
+  // Posts a real ffmpeg-generated ADTS AAC file (0.5 s silence) with
+  // format:"aac" and requires HTTP 200. This confirms:
+  //   1. Zod accepts "aac" (no schema regression)
+  //   2. ffmpeg can decode ADTS → WAV (no decode regression)
+  //   3. Whisper accepts the result (no transcription-stage regression)
+  // 5xx or network errors are failures — they indicate a real pipeline break.
+  console.log();
+  console.log("iOS ADTS Pipeline Check");
+  console.log("───────────────────────");
+  console.log(`  Audio:   real ADTS AAC (ffmpeg-generated 0.5 s silence, ${Buffer.from(ADTS_SILENCE_B64, "base64").byteLength} bytes)`);
+  console.log(`  Format:  aac (sent by iOS + Android clients)`);
+  console.log(`  Pass:    HTTP 200 only — 5xx means ffmpeg/Whisper pipeline failure`);
+  console.log();
 
-  for (const [reason, items] of byReason) {
-    const hint: Record<FailReason, string> = {
-      validation_error:
-        "  Hint: mode enum in openapi.yaml or api-zod generated schema is out of\n" +
-        "        sync with the values the app sends. Check MoVoiceBody.mode in\n" +
-        "        lib/api-zod/src/generated/api.ts and lib/api-spec/openapi.yaml.",
-      not_found:
-        "  Hint: endpoint not found. Is the API server running at the right URL?\n" +
-        "        Set MO_API_URL=http://localhost:<port> if needed.",
-      unexpected_4xx:
-        "  Hint: unexpected client-side HTTP error. Check server logs for details.",
-      network_error:
-        "  Hint: could not reach the server. Start the API server first:\n" +
-        "        pnpm --filter @workspace/api-server run dev",
-    };
+  process.stdout.write(`  [format:aac]  POST /api/mo/voice ... `);
+  const adtsResult  = await checkAdtsPipeline(serverUrl);
+  const adtsIcon    = adtsResult.passed ? "✓" : "✗";
+  const adtsStatus  = adtsResult.status != null ? String(adtsResult.status) : "---";
+  console.log(`${adtsIcon}  ${adtsStatus}  ${adtsResult.detail}`);
 
-    console.log(`  ── ${reason} ──`);
-    for (const r of items) {
-      console.log(`     ${r.mode}: ${r.detail}`);
+  console.log();
+  console.log("──────────────────────────────────────────");
+
+  if (!adtsResult.passed) {
+    console.log("  ✗ iOS ADTS pipeline check failed.\n");
+    if (adtsResult.status === 400) {
+      console.log('  Hint: format:"aac" was rejected by Zod (schema regression).');
+      console.log("        Check MoVoiceBody.format in:");
+      console.log("          lib/api-zod/src/generated/api.ts");
+      console.log("          lib/api-spec/openapi.yaml  (VoiceRequest.format.enum)");
+    } else {
+      console.log("  Hint: the pipeline returned an error for a valid ADTS AAC file.");
+      console.log("        This means ffmpeg failed to decode ADTS → WAV, or Whisper");
+      console.log("        rejected the result. Check API server logs for details.");
     }
     console.log();
-    console.log(hint[reason]);
-    console.log();
+    process.exit(1);
   }
 
-  process.exit(1);
+  console.log("  ✓ iOS ADTS pipeline confirmed — ADTS AAC decoded, transcribed, 200 OK.");
+  console.log();
+  process.exit(0);
 }
 
 main().catch(err => {

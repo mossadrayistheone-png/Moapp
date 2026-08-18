@@ -374,11 +374,11 @@ components:
       properties:
         audio:
           type: string
-          description: Base64-encoded audio file
+          description: Base64-encoded audio file (ADTS AAC on iOS and Android, WebM on web)
         format:
           type: string
           enum: [m4a, mp4, wav, caf, aac, webm]
-          default: m4a
+          default: aac
         mode:
           type: string
           enum: [executive, daily, luxury]
