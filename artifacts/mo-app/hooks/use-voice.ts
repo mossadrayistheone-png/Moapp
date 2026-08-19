@@ -993,11 +993,20 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
     const handleAppStateChange = (next: AppStateStatus) => {
       console.log("[Mo] AppState changed →", next);
-      if (next === "active") {
-        cleanupRef.current?.(true).catch(() => {});
-      } else if (next === "background" || next === "inactive") {
+      if (next === "background") {
+        // App truly backgrounded (user switched apps or locked screen).
+        // Clean up to avoid leaving a dangling recording or audio session.
         cleanupRef.current?.(true).catch(() => {});
       }
+      // "inactive" → brief system interruptions (Android permission dialogs,
+      // notification shade, screen-dim events). Do NOT clean up: killing an
+      // in-progress recording here causes "no output" on the first-ever tap
+      // because the mic-permission dialog triggers inactive → active before
+      // record() has finished setting up, and the "active" return trip used
+      // to fire a second cleanup that stopped the recording immediately.
+      // "active" → returning to foreground after any interruption. Cleaning
+      // up here was the root cause: it raced with startRecording() on Android
+      // and killed the recording the moment it started.
     };
 
     const subscription = AppState.addEventListener("change", handleAppStateChange);
