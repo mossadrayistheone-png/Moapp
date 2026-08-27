@@ -2,10 +2,13 @@
  * APK distribution routes
  *
  * POST /mo/apk — upload a new build (token-protected, used by CI)
- * GET  /mo/apk — redirect to the permanent GCS public URL for the latest build
+ * GET  /mo/apk — permanent link; redirects to a freshly-signed GCS URL
  *
- * The APK is stored at a fixed GCS path (apks/mo-latest.apk) and made public,
- * so the redirect target never changes between builds.
+ * The APK is stored at a fixed GCS path (apks/mo-latest.apk). This bucket
+ * enforces uniform bucket-level access, so per-object ACLs (file.makePublic())
+ * silently fail — a signed URL (minted via the Replit sidecar on every GET)
+ * is used instead. GET /mo/apk itself is the stable, never-changing link;
+ * only the signed URL it redirects to rotates per request.
  */
 
 import { Router, type Request, type Response } from "express";
@@ -33,8 +36,25 @@ const gcs = new Storage({
 
 const APK_BUCKET_ID = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID ?? "";
 const APK_OBJECT_KEY = "apks/mo-latest.apk";
-// Permanent public GCS URL — this never changes between builds
-const APK_PUBLIC_URL = `https://storage.googleapis.com/${APK_BUCKET_ID}/${APK_OBJECT_KEY}`;
+
+async function signApkUrl(): Promise<string> {
+  const response = await fetch(`${REPLIT_SIDECAR}/object-storage/signed-object-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      bucket_name: APK_BUCKET_ID,
+      object_name: APK_OBJECT_KEY,
+      method: "GET",
+      expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to sign APK URL, status ${response.status}`);
+  }
+  const { signed_url: signedUrl } = (await response.json()) as { signed_url: string };
+  return signedUrl;
+}
 
 // GET /mo/apk — permanent download link for the latest APK
 router.get("/mo/apk", async (_req: Request, res: Response) => {
@@ -49,8 +69,9 @@ router.get("/mo/apk", async (_req: Request, res: Response) => {
       res.status(404).json({ error: "No APK available yet — run a build first" });
       return;
     }
-    // 302 → permanent GCS public URL; Android fetches straight from GCS CDN
-    res.redirect(302, APK_PUBLIC_URL);
+    const signedUrl = await signApkUrl();
+    // 302 → freshly-signed GCS URL; Android fetches straight from GCS
+    res.redirect(302, signedUrl);
   } catch (err) {
     logger.error(err, "APK redirect failed");
     res.status(500).json({ error: "Internal error" });
@@ -97,13 +118,10 @@ router.post("/mo/apk", async (req: Request, res: Response) => {
       req.pipe(writeStream).on("finish", resolve).on("error", reject);
     });
 
-    // Make the object publicly readable so the GCS URL never requires auth
-    await file.makePublic();
-
     const [meta] = await file.getMetadata();
-    logger.info({ size: meta.size, url: APK_PUBLIC_URL }, "APK stored in GCS");
+    logger.info({ size: meta.size, key: APK_OBJECT_KEY }, "APK stored in GCS");
 
-    res.json({ ok: true, url: APK_PUBLIC_URL, size: meta.size });
+    res.json({ ok: true, url: "/api/mo/apk", size: meta.size });
   } catch (err) {
     logger.error(err, "APK upload to GCS failed");
     res.status(500).json({ error: "Upload failed" });
