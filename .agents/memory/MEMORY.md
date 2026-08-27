@@ -14,3 +14,4 @@
 - [API spec/codegen drift check](api-codegen-drift-check.md) — `api-spec-drift` validation reruns orval codegen and diffs generated dirs; refuses to run if they already have uncommitted changes.
 - [expo-audio VAD metering](vad-metering-expo-audio.md) — read mic level via `useAudioRecorderState` hook + ref, not `recorder.getStatus()` in a silently-caught setInterval.
 - [pnpm v11 ERR_PNPM_IGNORED_BUILDS](pnpm-v11-ignored-builds.md) — pnpm v11+ ignores `onlyBuiltDependencies`, needs `allowBuilds` too, or a hard-pinned unpinned `packageManager` gets you a newer pnpm on the host than dev.
+- [Jest testing for Mo's voice/text hooks](jest-testing-mo-hooks.md) — jest-expo setup, autoplay:false shortcut for useVoice, why orchestration logic must be extracted to be testable.

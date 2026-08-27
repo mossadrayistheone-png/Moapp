@@ -30,6 +30,10 @@ args = "apps/web: Web Frontend"
 task = "workflow.run"
 args = "api-spec-drift"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "mo-app-test"
+
 [[workflows.workflow]]
 name = "apps/web: Web Frontend"
 author = "agent"
@@ -48,6 +52,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash lib/api-spec/check-drift.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "mo-app-test"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd artifacts/mo-app && pnpm run test"
 
 [workflows.workflow.metadata]
 isValidation = true

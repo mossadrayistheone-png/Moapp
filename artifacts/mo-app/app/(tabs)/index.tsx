@@ -28,6 +28,7 @@ import { LuxuryScreen } from "@/components/modes/LuxuryScreen";
 import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
+import { guardTextSubmit, guardVoiceToggle } from "@/hooks/use-reply-masking-guard";
 import { useTextChat } from "@/hooks/use-text-chat";
 import {
   useVoice,
@@ -202,35 +203,37 @@ export default function HomeScreen() {
   // ── Voice toggle wrapper: clear a stale chat reply when a fresh voice
   //    turn starts, so it can't mask the new voice answer once it lands ──
   const handleToggle = useCallback(() => {
-    if (state === "idle" || state === "error") resetChat();
-    toggle();
+    guardVoiceToggle({ voiceState: state, resetChat, toggle });
   }, [state, resetChat, toggle]);
 
   // ── Per-mode submit handlers ──
   const makeSubmitHandler = useCallback(
     (pageMode: AssistantMode) => (text: string) => {
-      // Clear any leftover voice transcript/reply first — otherwise the
-      // `reply || chatReply` / `transcript || liveTranscript` fallbacks in
-      // each screen keep showing the old voice turn's content, making a
-      // fresh text submission look like it did nothing.
-      resetReply();
       const ctx = ctxRef.current;
-      submitText(text, {
-        mode: pageMode,
-        messages: ctx.conversationHistory,
-        memories: ctx.memories,
-        tasks: ctx.tasks,
-        reminders: ctx.reminders,
-        notes: ctx.notes,
-        preferences: {
-          name:           ctx.preferences.name || undefined,
-          location:       ctx.preferences.location || undefined,
-          timezone:       ctx.preferences.timezone || undefined,
-          responseLength: ctx.preferences.responseLength,
-        },
+      // guardTextSubmit clears any leftover voice transcript/reply first —
+      // otherwise the `reply || chatReply` / `transcript || liveTranscript`
+      // fallbacks in each screen keep showing the old voice turn's content,
+      // making a fresh text submission look like it did nothing.
+      guardTextSubmit({
+        resetReply,
+        submitText: () =>
+          submitText(text, {
+            mode: pageMode,
+            messages: ctx.conversationHistory,
+            memories: ctx.memories,
+            tasks: ctx.tasks,
+            reminders: ctx.reminders,
+            notes: ctx.notes,
+            preferences: {
+              name:           ctx.preferences.name || undefined,
+              location:       ctx.preferences.location || undefined,
+              timezone:       ctx.preferences.timezone || undefined,
+              responseLength: ctx.preferences.responseLength,
+            },
+          }),
       });
     },
-    [submitText]
+    [submitText, resetReply]
   );
 
   const submitDaily     = useCallback(makeSubmitHandler("daily"),     [makeSubmitHandler]);
