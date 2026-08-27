@@ -2,13 +2,22 @@
  * APK distribution routes
  *
  * POST /mo/apk — upload a new build (token-protected, used by CI)
- * GET  /mo/apk — permanent link; redirects to a freshly-signed GCS URL
+ * GET  /mo/apk — permanent link; serves an HTML landing page with a freshly-
+ *                signed GCS URL, both as a clickable download button and as
+ *                plain copy-pasteable text
  *
  * The APK is stored at a fixed GCS path (apks/mo-latest.apk). This bucket
  * enforces uniform bucket-level access, so per-object ACLs (file.makePublic())
  * silently fail — a signed URL (minted via the Replit sidecar on every GET)
  * is used instead. GET /mo/apk itself is the stable, never-changing link;
- * only the signed URL it redirects to rotates per request.
+ * only the signed URL embedded in the landing page rotates per request.
+ *
+ * Why a landing page instead of a raw 302 redirect: embedded/in-app browsers
+ * (e.g. opening the link from inside a chat or another app) often fail to
+ * hand a binary response off to the OS download manager when it arrives from
+ * an automatic redirect. A real page with a user-clicked <a download> link,
+ * plus the raw URL shown as selectable text to copy into a full browser, is
+ * far more likely to complete on both paths.
  */
 
 import { Router, type Request, type Response } from "express";
@@ -37,6 +46,10 @@ const gcs = new Storage({
 const APK_BUCKET_ID = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID ?? "";
 const APK_OBJECT_KEY = "apks/mo-latest.apk";
 
+// Signed URL TTL — generous enough that a manually-copied link pasted into a
+// different app/browser a few minutes later still works.
+const SIGNED_URL_TTL_MS = 30 * 60 * 1000;
+
 async function signApkUrl(): Promise<string> {
   const response = await fetch(`${REPLIT_SIDECAR}/object-storage/signed-object-url`, {
     method: "POST",
@@ -45,7 +58,7 @@ async function signApkUrl(): Promise<string> {
       bucket_name: APK_BUCKET_ID,
       object_name: APK_OBJECT_KEY,
       method: "GET",
-      expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      expires_at: new Date(Date.now() + SIGNED_URL_TTL_MS).toISOString(),
     }),
     signal: AbortSignal.timeout(30_000),
   });
@@ -56,7 +69,76 @@ async function signApkUrl(): Promise<string> {
   return signedUrl;
 }
 
-// GET /mo/apk — permanent download link for the latest APK
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+function renderApkLandingPage(signedUrl: string): string {
+  const safeUrl = escapeHtml(signedUrl);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download Mo</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #0b0b0d; color: #f2f2f2; margin: 0; padding: 24px 16px;
+         display: flex; flex-direction: column; align-items: center; min-height: 100vh; box-sizing: border-box; }
+  h1 { font-size: 20px; margin: 12px 0 4px; }
+  p.sub { color: #9a9a9f; font-size: 14px; margin: 0 0 28px; text-align: center; max-width: 360px; }
+  a.download-btn { display: block; width: 100%; max-width: 340px; text-align: center;
+         background: #6c5ce7; color: #fff; font-size: 17px; font-weight: 600;
+         padding: 16px 0; border-radius: 12px; text-decoration: none; margin-bottom: 20px; }
+  a.download-btn:active { opacity: 0.85; }
+  .copy-box { width: 100%; max-width: 340px; }
+  .copy-label { font-size: 12px; color: #9a9a9f; margin-bottom: 6px; }
+  .copy-row { display: flex; gap: 8px; }
+  input.link-field { flex: 1; min-width: 0; background: #1a1a1e; color: #e6e6e6; border: 1px solid #2c2c31;
+         border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  button.copy-btn { background: #232327; color: #fff; border: 1px solid #2c2c31; border-radius: 8px;
+         padding: 0 16px; font-size: 13px; }
+  .hint { color: #6f6f76; font-size: 12px; margin-top: 24px; text-align: center; max-width: 340px; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <h1>Mo — Android APK</h1>
+  <p class="sub">Tap the button to download and install. If the download doesn't finish, copy the link below and open it in Chrome.</p>
+  <a class="download-btn" id="dl" href="${safeUrl}" download="mo.apk">Download APK</a>
+  <div class="copy-box">
+    <div class="copy-label">Or copy this link:</div>
+    <div class="copy-row">
+      <input class="link-field" id="link" type="text" readonly value="${safeUrl}" onclick="this.select()">
+      <button class="copy-btn" id="copyBtn" type="button">Copy</button>
+    </div>
+  </div>
+  <p class="hint">This link expires in 30 minutes. If it stops working, reload this page for a fresh one. Reload also gets you a fresh link if you plan to paste it into Chrome instead of tapping the button.</p>
+  <script>
+    document.getElementById('copyBtn').addEventListener('click', function () {
+      var field = document.getElementById('link');
+      field.select();
+      field.setSelectionRange(0, 99999);
+      var done = function () {
+        var btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(field.value).then(done).catch(function () {
+          document.execCommand('copy'); done();
+        });
+      } else {
+        document.execCommand('copy'); done();
+      }
+    });
+  </script>
+</body>
+</html>`;
+}
+
+// GET /mo/apk — permanent download link for the latest APK. Serves an HTML
+// landing page (not a raw redirect) with both a clickable download button and
+// the same URL shown as plain, selectable text for manual copy/paste.
 router.get("/mo/apk", async (_req: Request, res: Response) => {
   if (!APK_BUCKET_ID) {
     res.status(503).json({ error: "Object storage not configured" });
@@ -70,10 +152,10 @@ router.get("/mo/apk", async (_req: Request, res: Response) => {
       return;
     }
     const signedUrl = await signApkUrl();
-    // 302 → freshly-signed GCS URL; Android fetches straight from GCS
-    res.redirect(302, signedUrl);
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).send(renderApkLandingPage(signedUrl));
   } catch (err) {
-    logger.error(err, "APK redirect failed");
+    logger.error(err, "APK landing page failed");
     res.status(500).json({ error: "Internal error" });
   }
 });
