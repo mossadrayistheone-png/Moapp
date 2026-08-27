@@ -1,6 +1,6 @@
 /**
- * ListeningPulse — three staggered pulsing dots shown on Android while
- * voiceState is "listening" but the live transcript hasn't arrived yet
+ * ListeningPulse — three staggered pulsing dots shown on iOS and Android
+ * while voiceState is "listening" but the live transcript hasn't arrived yet
  * (the first ~1.2 s before the first ADTS partial upload completes).
  *
  * Props:

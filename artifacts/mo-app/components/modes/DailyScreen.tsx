@@ -369,7 +369,7 @@ export function DailyScreen({
             ) : (
               <View style={s.voicePulse} />
             )}
-            {voiceState === "listening" && !liveTranscript && Platform.OS === "android" ? (
+            {voiceState === "listening" && !liveTranscript ? (
               <ListeningPulse color={T.accent} />
             ) : (
               <Text style={s.voiceStateText} numberOfLines={1}>
