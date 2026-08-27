@@ -12,3 +12,4 @@
 - [Voice pipeline silent failures](voice-pipeline-silent-fail.md) — two Android break points that look like "no output": recorder.stop() throw on auto-stop, and API server EADDRINUSE crash.
 - [API server port conflict](api-server-port-conflict.md) — task-agent merges can leave EADDRINUSE; check workflow status after every merge touching api-server.
 - [API spec/codegen drift check](api-codegen-drift-check.md) — `api-spec-drift` validation reruns orval codegen and diffs generated dirs; refuses to run if they already have uncommitted changes.
+- [expo-audio VAD metering](vad-metering-expo-audio.md) — read mic level via `useAudioRecorderState` hook + ref, not `recorder.getStatus()` in a silently-caught setInterval.

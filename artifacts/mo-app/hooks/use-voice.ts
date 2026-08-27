@@ -1,6 +1,7 @@
 import { Audio } from "expo-av";                    // filler playback only (bundled assets)
 import {
   useAudioRecorder,
+  useAudioRecorderState,
   useAudioPlayer,
   useAudioPlayerStatus,
   requestRecordingPermissionsAsync,
@@ -276,6 +277,17 @@ export function useVoice(options: UseVoiceOptions = {}) {
     }
   });
 
+  // Live metering (dBFS) for VAD — the SDK-documented way to read a recorder's
+  // current level is the `useAudioRecorderState` hook, NOT `recorder.getStatus()`
+  // called ad hoc from a hand-rolled interval. Poll at VAD_AMBIENT_POLL_MS (the
+  // finer of our two intervals) so both the ambient-calibration loop and the
+  // VAD loop below always see a fresh reading. The hook's returned state is
+  // mirrored into a ref so synchronous code (setInterval callbacks) can read
+  // the latest value without depending on React re-renders.
+  const recorderState = useAudioRecorderState(recorder, VAD_AMBIENT_POLL_MS);
+  const recorderStateRef = useRef(recorderState);
+  recorderStateRef.current = recorderState;   // update on every render (synchronous)
+
   const recordingActive = useRef(false);
   const stateRef        = useRef<AssistantState>("idle");
   const inflightRef     = useRef(false);
@@ -482,12 +494,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
         const ambientSamples: number[] = [];
         let elapsed = 0;
         const sampleInterval = setInterval(() => {
-          try {
-            const status = recorder.getStatus();
-            const level: number = (status as any).metering ?? (status as any).averagePower ?? -160;
-            // Only collect plausible readings (ignore -160 sentinel / no-data)
-            if (level > -160) ambientSamples.push(level);
-          } catch { /* recorder not ready yet — skip tick */ }
+          // Read the SDK-maintained recorder state ref (kept fresh by
+          // useAudioRecorderState above) instead of calling a native method
+          // synchronously here — this can never throw, it's a plain object read.
+          const level: number = recorderStateRef.current.metering ?? -160;
+          // Only collect plausible readings (ignore -160 sentinel / no-data)
+          if (level > -160) ambientSamples.push(level);
           elapsed += VAD_AMBIENT_POLL_MS;
           if (elapsed >= VAD_AMBIENT_SAMPLE_MS) {
             clearInterval(sampleInterval);
@@ -545,42 +557,39 @@ export function useVoice(options: UseVoiceOptions = {}) {
           return;
         }
 
-        try {
-          const status = recorder.getStatus();
-          const level: number = (status as any).metering ?? (status as any).averagePower ?? -160;
+        // Read the SDK-maintained recorder state ref (kept fresh by
+        // useAudioRecorderState above) — a plain object read, never throws.
+        const level: number = recorderStateRef.current.metering ?? -160;
 
-          // Normalise dBFS (-60…0) → 0–1 and publish for UI animation.
-          // Floor at -60 dBFS (practical silence on mobile mics).
-          const normalised = Math.max(0, Math.min(1, (level + 60) / 60));
-          setMicLevel(normalised);
+        // Normalise dBFS (-60…0) → 0–1 and publish for UI animation.
+        // Floor at -60 dBFS (practical silence on mobile mics).
+        const normalised = Math.max(0, Math.min(1, (level + 60) / 60));
+        setMicLevel(normalised);
 
-          if (!speechDetected) {
-            if (level > sessionSpeechThreshold) {
-              speechDetected = true;
-              silenceMs = 0;
-              console.log("[Mo] VAD — speech detected, level:", level.toFixed(1), "dBFS (threshold:", sessionSpeechThreshold.toFixed(1), ")");
-            }
-            // Haven't heard speech yet — reset silence counter and wait
-            return;
-          }
-
-          // Speech was detected: track silence duration.
-          // sessionSilenceThreshold < sessionSpeechThreshold (guaranteed by calibration),
-          // so a level above the silence threshold always re-sets the counter correctly.
-          if (level < sessionSilenceThreshold) {
-            silenceMs += VAD_POLL_INTERVAL_MS;
-            if (silenceMs >= VAD_SILENCE_DURATION_MS) {
-              console.log("[Mo] VAD — silence for", silenceMs, "ms — triggering early stop");
-              clearInterval(vadIntervalRef.current!);
-              vadIntervalRef.current = null;
-              stopAndProcessRef.current?.();
-            }
-          } else {
-            // Sound again — reset the silence counter
+        if (!speechDetected) {
+          if (level > sessionSpeechThreshold) {
+            speechDetected = true;
             silenceMs = 0;
+            console.log("[Mo] VAD — speech detected, level:", level.toFixed(1), "dBFS (threshold:", sessionSpeechThreshold.toFixed(1), ")");
           }
-        } catch {
-          // getStatus() may throw if recorder is in a bad state — just skip
+          // Haven't heard speech yet — reset silence counter and wait
+          return;
+        }
+
+        // Speech was detected: track silence duration.
+        // sessionSilenceThreshold < sessionSpeechThreshold (guaranteed by calibration),
+        // so a level above the silence threshold always re-sets the counter correctly.
+        if (level < sessionSilenceThreshold) {
+          silenceMs += VAD_POLL_INTERVAL_MS;
+          if (silenceMs >= VAD_SILENCE_DURATION_MS) {
+            console.log("[Mo] VAD — silence for", silenceMs, "ms — triggering early stop");
+            clearInterval(vadIntervalRef.current!);
+            vadIntervalRef.current = null;
+            stopAndProcessRef.current?.();
+          }
+        } else {
+          // Sound again — reset the silence counter
+          silenceMs = 0;
         }
       }, VAD_POLL_INTERVAL_MS);
 
