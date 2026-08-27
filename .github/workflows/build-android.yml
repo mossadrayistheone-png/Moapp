@@ -15,6 +15,14 @@ on:
         options:
           - release
           - debug
+      format:
+        description: 'Output format — apk for sideloading, aab for Google Play upload'
+        required: false
+        default: 'apk'
+        type: choice
+        options:
+          - apk
+          - aab
 
 jobs:
   build:
@@ -58,6 +66,9 @@ jobs:
         env:
           CI: '1'
           EXPO_PUBLIC_DOMAIN: ${{ inputs.domain || secrets.EXPO_PUBLIC_DOMAIN }}
+          EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY }}
+          EXPO_PUBLIC_REVENUECAT_IOS_API_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY }}
+          EXPO_PUBLIC_REVENUECAT_TEST_API_KEY: ${{ secrets.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY }}
         run: npx expo prebuild --platform android --no-install --clean
 
       # 7. Verify android project exists
@@ -113,46 +124,68 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > artifacts/mo-app/android/local.properties
           echo "reactNativeArchitectures=arm64-v8a" >> artifacts/mo-app/android/gradle.properties
 
-      # 9. Build APK with Gradle (standard command — no injected ABI flag)
-      - name: Build APK
+      # 9. Build with Gradle. format=apk produces an installable APK (sideloading);
+      #    format=aab produces an Android App Bundle for Google Play Console upload.
+      - name: Build ${{ inputs.format }}
         working-directory: artifacts/mo-app/android
         env:
           EXPO_PUBLIC_DOMAIN: ${{ inputs.domain || secrets.EXPO_PUBLIC_DOMAIN }}
         run: |
-          if [ "${{ inputs.variant }}" = "debug" ]; then
-            ./gradlew :app:assembleDebug --no-daemon
+          if [ "${{ inputs.format }}" = "aab" ]; then
+            if [ "${{ inputs.variant }}" = "debug" ]; then
+              ./gradlew :app:bundleDebug --no-daemon
+            else
+              ./gradlew :app:bundleRelease --no-daemon
+            fi
           else
-            ./gradlew :app:assembleRelease --no-daemon
+            if [ "${{ inputs.variant }}" = "debug" ]; then
+              ./gradlew :app:assembleDebug --no-daemon
+            else
+              ./gradlew :app:assembleRelease --no-daemon
+            fi
           fi
 
-      # 10. Locate and rename APK for a consistent filename.
-      #     ABI-split builds output app-arm64-v8a-release.apk not app-release.apk,
-      #     so we use find to locate whatever Gradle produced.
-      - name: Rename APK
+      # 10. Locate and rename the build output for a consistent filename.
+      #     ABI-split APK builds output app-arm64-v8a-release.apk not app-release.apk,
+      #     so we use find to locate whatever Gradle produced. AAB outputs live under
+      #     outputs/bundle/<variant>/ instead of outputs/apk/<variant>/.
+      - name: Rename build output
         id: apk
         run: |
           VARIANT="${{ inputs.variant }}"
-          DEST="mo-${VARIANT}-build${{ github.run_number }}.apk"
-          echo "=== APK outputs ==="
-          find artifacts/mo-app/android/app/build/outputs/apk -name "*.apk" | sort
-          # Pick the first signed/final APK (skip *-unsigned.apk)
-          SRC=$(find "artifacts/mo-app/android/app/build/outputs/apk/${VARIANT}" \
-                  -name "*.apk" ! -name "*unsigned*" | sort | head -1)
+          FORMAT="${{ inputs.format }}"
+          if [ "$FORMAT" = "aab" ]; then
+            EXT="aab"
+            OUT_DIR="artifacts/mo-app/android/app/build/outputs/bundle/${VARIANT}"
+          else
+            EXT="apk"
+            OUT_DIR="artifacts/mo-app/android/app/build/outputs/apk/${VARIANT}"
+          fi
+          DEST="mo-${VARIANT}-build${{ github.run_number }}.${EXT}"
+          echo "=== ${FORMAT} outputs ==="
+          find "$(dirname "$(dirname "$OUT_DIR")")" -name "*.${EXT}" | sort
+          # Pick the first signed/final output (skip *-unsigned.*)
+          SRC=$(find "$OUT_DIR" -name "*.${EXT}" ! -name "*unsigned*" | sort | head -1)
           if [ -z "$SRC" ]; then
-            echo "ERROR: no APK found in outputs/apk/${VARIANT}/"
-            find artifacts/mo-app/android/app/build/outputs/apk -type f | sort
+            echo "ERROR: no ${EXT} found in ${OUT_DIR}/"
+            find "$(dirname "$(dirname "$OUT_DIR")")" -type f | sort
             exit 1
           fi
           echo "Using: $SRC"
           cp "$SRC" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
           echo "name=$DEST" >> "$GITHUB_OUTPUT"
+          echo "ext=$EXT" >> "$GITHUB_OUTPUT"
 
       # 11. Upload APK to Replit Object Storage via the API server.
       #     This overwrites a fixed GCS path (apks/mo-latest.apk) on every build,
       #     keeping a single permanent, non-expiring public download URL:
       #       https://<API_DOMAIN>/api/mo/apk
+      #     Skipped for AAB builds — that endpoint serves an installable APK to end
+      #     users, and an AAB cannot be installed directly on a device. AAB output
+      #     is Play Console upload material only; use the Actions artifact below.
       - name: Upload APK to permanent CDN (Replit Object Storage)
+        if: ${{ inputs.format != 'aab' }}
         env:
           API_DOMAIN: ${{ inputs.domain || secrets.EXPO_PUBLIC_DOMAIN }}
           APK_UPLOAD_TOKEN: ${{ secrets.APK_UPLOAD_TOKEN }}
@@ -177,11 +210,13 @@ jobs:
           echo "-----------------------------------------"
           echo ""
 
-      # 12. Also keep the Actions artifact as a backup (30-day retention)
-      - name: Upload APK artifact (backup)
+      # 12. Also keep the Actions artifact as a backup (30-day retention).
+      #     For AAB builds this is the ONLY place the file is published — download
+      #     it from the workflow run and upload it to Google Play Console by hand.
+      - name: Upload build artifact (backup)
         uses: actions/upload-artifact@v4
         with:
-          name: mo-${{ inputs.variant }}-build-${{ github.run_number }}
+          name: mo-${{ inputs.variant }}-${{ inputs.format }}-build-${{ github.run_number }}
           path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
           retention-days: 30

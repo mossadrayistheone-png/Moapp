@@ -9,11 +9,6 @@
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "backgroundColor": "#000000",
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#000000"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.mo.voice",
@@ -24,11 +19,15 @@
     },
     "android": {
       "package": "com.mo.voice",
-      "versionCode": 35,
+      "versionCode": 41,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#000000"
+      }
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -55,6 +54,14 @@
           "icon": "./assets/images/icon.png",
           "color": "#C9A84C",
           "defaultChannel": "reminders"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
         }
       ]
     ],
