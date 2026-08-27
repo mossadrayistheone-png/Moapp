@@ -15,3 +15,4 @@
 - [expo-audio VAD metering](vad-metering-expo-audio.md) — read mic level via `useAudioRecorderState` hook + ref, not `recorder.getStatus()` in a silently-caught setInterval.
 - [pnpm v11 ERR_PNPM_IGNORED_BUILDS](pnpm-v11-ignored-builds.md) — pnpm v11+ ignores `onlyBuiltDependencies`, needs `allowBuilds` too, or a hard-pinned unpinned `packageManager` gets you a newer pnpm on the host than dev.
 - [Jest testing for Mo's voice/text hooks](jest-testing-mo-hooks.md) — jest-expo setup, autoplay:false shortcut for useVoice, why orchestration logic must be extracted to be testable.
+- [Mo text-chat TTS reuses voice-pipeline playback](mo-text-chat-tts.md) — /mo/chat now speaks via the same shared playback path as /mo/voice; any new speaking endpoint should reuse it too.

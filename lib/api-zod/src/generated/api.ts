@@ -100,6 +100,18 @@ export const MoChatBody = zod.object({
 
 export const MoChatResponse = zod.object({
   reply: zod.string(),
+  audioBase64: zod
+    .string()
+    .optional()
+    .describe(
+      "Base64-encoded ElevenLabs TTS audio for the reply. Omitted if TTS failed server-side (text-only fallback).",
+    ),
+  audioUrl: zod
+    .string()
+    .optional()
+    .describe(
+      "Short-lived https URL serving the same audio as audioBase64. Omitted if TTS failed server-side.",
+    ),
   functionCalled: zod.string().optional(),
   reminder: zod
     .object({

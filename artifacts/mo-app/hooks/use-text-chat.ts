@@ -47,8 +47,13 @@ interface ToolResult {
   };
 }
 
+interface ChatAudio {
+  audioBase64?: string;
+  audioUrl?: string;
+}
+
 interface UseTextChatOptions {
-  onComplete: (userText: string, reply: string, tools: ToolResult) => void;
+  onComplete: (userText: string, reply: string, tools: ToolResult, audio: ChatAudio) => void;
 }
 
 interface UseTextChatReturn {
@@ -154,7 +159,10 @@ export function useTextChat({ onComplete }: UseTextChatOptions): UseTextChatRetu
           taskAction:    data.taskAction,
         };
 
-        onComplete(text, reply, tools);
+        // Mo must speak a typed reply the same way he speaks a voice reply.
+        // audioBase64/audioUrl are absent if ElevenLabs TTS failed server-side
+        // (see mo.ts) — that's a graceful text-only fallback, not an error.
+        onComplete(text, reply, tools, { audioBase64: data.audioBase64, audioUrl: data.audioUrl });
       } catch (err: any) {
         if (err?.name === "AbortError") return;
         const msg = err?.message ?? "Failed to get a response. Please try again.";

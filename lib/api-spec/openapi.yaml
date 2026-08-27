@@ -331,6 +331,12 @@ components:
       properties:
         reply:
           type: string
+        audioBase64:
+          type: string
+          description: Base64-encoded ElevenLabs TTS audio for the reply. Omitted if TTS failed server-side (text-only fallback).
+        audioUrl:
+          type: string
+          description: Short-lived https URL serving the same audio as audioBase64. Omitted if TTS failed server-side.
         functionCalled:
           type: string
         reminder:

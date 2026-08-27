@@ -14,6 +14,10 @@ import type { TaskAction } from "./taskAction";
 
 export interface ChatResponse {
   reply: string;
+  /** Base64-encoded ElevenLabs TTS audio for the reply. Omitted if TTS failed server-side (text-only fallback). */
+  audioBase64?: string;
+  /** Short-lived https URL serving the same audio as audioBase64. Omitted if TTS failed server-side. */
+  audioUrl?: string;
   functionCalled?: string;
   reminder?: ReminderData;
   reminderAction?: ReminderAction;

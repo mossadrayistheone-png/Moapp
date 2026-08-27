@@ -144,25 +144,8 @@ export default function HomeScreen() {
     ),
   };
 
-  // ── Text chat callbacks ──
-  const onChatComplete = useCallback(
-    (userText: string, reply: string, tools: any) => {
-      // Add to conversation history
-      addToHistory(userText, reply);
-      // Fire any tool results
-      if (tools?.note)           handleNote(tools.note);
-      if (tools?.noteAction)     handleNoteAction(tools.noteAction);
-      if (tools?.reminder)       handleReminder(tools.reminder);
-      if (tools?.reminderAction) handleReminderAction(tools.reminderAction);
-      if (tools?.memoryAction)   handleMemoryAction(tools.memoryAction);
-      if (tools?.taskAction)     handleTaskAction(tools.taskAction);
-      if (tools?.plan)           setDayPlan({ ...(tools.plan as DayPlan), generatedAt: Date.now() });
-    },
-    [addToHistory, handleNote, handleNoteAction, handleReminder, handleReminderAction, handleMemoryAction, handleTaskAction]
-  );
-
   // ── Single shared voice instance ──
-  const { state, mode, setMode, transcript, liveTranscript, reply, errorMessage, micLevel, toggle, cancelVoice, resetReply } = useVoice({
+  const { state, mode, setMode, transcript, liveTranscript, reply, errorMessage, micLevel, toggle, cancelVoice, resetReply, speakAnswer } = useVoice({
     conversationHistory,
     memories,
     tasks,
@@ -177,6 +160,26 @@ export default function HomeScreen() {
     autoplay:  preferences.autoplay,
     callbacks: voiceCallbacks,
   });
+
+  // ── Text chat callbacks ──
+  const onChatComplete = useCallback(
+    (userText: string, reply: string, tools: any, audio: { audioBase64?: string; audioUrl?: string }) => {
+      // Add to conversation history
+      addToHistory(userText, reply);
+      // Fire any tool results
+      if (tools?.note)           handleNote(tools.note);
+      if (tools?.noteAction)     handleNoteAction(tools.noteAction);
+      if (tools?.reminder)       handleReminder(tools.reminder);
+      if (tools?.reminderAction) handleReminderAction(tools.reminderAction);
+      if (tools?.memoryAction)   handleMemoryAction(tools.memoryAction);
+      if (tools?.taskAction)     handleTaskAction(tools.taskAction);
+      if (tools?.plan)           setDayPlan({ ...(tools.plan as DayPlan), generatedAt: Date.now() });
+      // Mo speaks a typed reply the same way he speaks a voice reply. No-ops
+      // if autoplay is off or the server's TTS failed (text-only fallback).
+      speakAnswer(audio?.audioBase64, audio?.audioUrl);
+    },
+    [addToHistory, handleNote, handleNoteAction, handleReminder, handleReminderAction, handleMemoryAction, handleTaskAction, speakAnswer]
+  );
 
   // ── Single shared text chat instance ──
   const { chatState, chatReply, chatError, submitText, resetChat } = useTextChat({

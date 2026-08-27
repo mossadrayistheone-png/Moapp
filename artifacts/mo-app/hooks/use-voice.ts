@@ -360,6 +360,78 @@ export function useVoice(options: UseVoiceOptions = {}) {
     setState(s);
   };
 
+  // ── Answer audio: URI resolution + playback trigger ───────────────────────
+  // Shared by both pipelines — voice input (this hook's own /mo/voice call)
+  // and text input (useTextChat's /mo/chat call, via the exported
+  // `speakAnswer` below) — so a typed reply is spoken exactly like a voice
+  // reply: same https/data-URI fallback, same stuck-playback safety timeout.
+  const resolveAnswerAudioUri = useCallback((audioBase64: string, audioUrl?: string): string => {
+    // Android New Architecture's MediaPlayer can silently reject local file://
+    // URIs, so we never write the answer to disk. Primary source is the
+    // server's https URL (streamed); fallback is a base64 data URI (already
+    // proven on web) if the URL playback never starts.
+    const dataUri = `data:audio/mpeg;base64,${audioBase64}`;
+    if (Platform.OS !== "web" && audioUrl) {
+      answerFallbackRef.current = dataUri;
+      const uri = `${BASE_URL}${audioUrl}`;
+      console.log("[Mo] Answer audio via https URL:", uri);
+      return uri;
+    }
+    answerFallbackRef.current = null;
+    return dataUri;
+  }, []);
+
+  const playAnswerAudio = useCallback((audioUri: string) => {
+    // Setting answerSource triggers useAudioPlayer to load the file. Effect
+    // #3 below detects isLoaded and calls answerPlayerRef.current.play().
+    // Effects #1 and #2 detect playback start and completion.
+    console.log("[Mo] Starting answer playback — setting answerSource:", audioUri);
+    transitionPhase("speaking", { audioUri });
+    isPlayingAnswerRef.current = true;
+    playbackStartedRef.current = false;
+    setAnswerSource(audioUri);
+
+    // If expo-audio silently fails to start (native bug or unsupported format),
+    // the playback effects never fire and the app gets permanently stuck in
+    // "speaking" state with inflightRef=true blocking all future requests.
+    // First timeout: retry once with the base64 data-URI fallback (proven on
+    // web). Second timeout: force idle — text reply is still visible.
+    const armAnswerSafetyTimer = () => {
+      if (answerSafetyTimerRef.current) clearTimeout(answerSafetyTimerRef.current);
+      answerSafetyTimerRef.current = setTimeout(() => {
+        answerSafetyTimerRef.current = null;
+        if (!isPlayingAnswerRef.current || playbackStartedRef.current) return;
+
+        const fallback = answerFallbackRef.current;
+        if (fallback) {
+          console.warn("[Mo] Safety timeout — https answer audio never started. Retrying with data URI fallback.");
+          answerFallbackRef.current = null;   // one retry only
+          setAnswerSource(fallback);
+          armAnswerSafetyTimer();
+          return;
+        }
+
+        console.warn("[Mo] Safety timeout — answer audio never started. Returning to idle. Text reply still visible.");
+        isPlayingAnswerRef.current = false;
+        inflightRef.current = false;
+        setStateSync("idle");
+        transitionPhase("idle", { reason: "playback_safety_timeout_text_fallback" });
+        setAnswerSource(null);
+      }, 8_000);
+    };
+    armAnswerSafetyTimer();
+  }, [transitionPhase]);
+
+  // Public entry point for a turn whose reply audio came from a source other
+  // than this hook's own voice pipeline (currently: useTextChat's /mo/chat
+  // response) — plays it back the same way a voice reply would, respecting
+  // the same `autoplay` preference and TTS-failure fallback (no audioBase64
+  // means the server's TTS failed; the text reply stays visible either way).
+  const speakAnswer = useCallback((audioBase64?: string, audioUrl?: string) => {
+    if (!autoplay || !audioBase64) return;
+    playAnswerAudio(resolveAnswerAudioUri(audioBase64, audioUrl));
+  }, [autoplay, playAnswerAudio, resolveAnswerAudioUri]);
+
   // ── Playback lifecycle effects ────────────────────────────────────────────
 
   // 1. Detect when answer playback actually starts
@@ -958,23 +1030,8 @@ export function useVoice(options: UseVoiceOptions = {}) {
             return null;
           }
 
-          // ── Answer audio source selection ─────────────────────────────────
-          // Android New Architecture's MediaPlayer can silently reject local
-          // file:// URIs, so we never write the answer to disk. Primary source
-          // is the server's https URL (streamed); fallback is a base64 data URI
-          // (already proven on web) if the URL playback never starts.
-          const dataUri = `data:audio/mpeg;base64,${audiob64}`;
-          let audioUri: string;
-          if (Platform.OS !== "web" && data.audioUrl) {
-            audioUri = `${BASE_URL}${data.audioUrl}`;
-            answerFallbackRef.current = dataUri;
-            console.log("[Mo] Answer audio via https URL:", audioUri);
-          } else {
-            audioUri = dataUri;
-            answerFallbackRef.current = null;
-          }
           console.log("[Mo] stage generating_voice complete", { elevenTtsMs: data.timings?.elevenTtsMs ?? null, totalMs: data.timings?.totalMs ?? null });
-          return audioUri;
+          return resolveAnswerAudioUri(audiob64, data.audioUrl);
         });
 
       // Wait for BOTH filler to finish AND API to respond
@@ -999,45 +1056,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       }
 
       // ── Play the real answer via expo-audio ───────────────────────────────
-      // Setting answerSource triggers useAudioPlayer to load the file.
-      // Effect #3 above detects isLoaded and calls answerPlayerRef.current.play().
-      // Effects #1 and #2 detect playback start and completion.
-      console.log("[Mo] Starting answer playback — setting answerSource:", answerUri);
-      transitionPhase("speaking", { audioUri: answerUri });
-      isPlayingAnswerRef.current = true;
-      playbackStartedRef.current = false;
-      setAnswerSource(answerUri);
-
-      // ── Safety timeout ────────────────────────────────────────────────────
-      // If expo-audio silently fails to start (native bug or unsupported format),
-      // the playback effects never fire and the app gets permanently stuck in
-      // "speaking" state with inflightRef=true blocking all future requests.
-      // First timeout: retry once with the base64 data-URI fallback (proven on
-      // web). Second timeout: force idle — text reply is still visible.
-      const armAnswerSafetyTimer = () => {
-        if (answerSafetyTimerRef.current) clearTimeout(answerSafetyTimerRef.current);
-        answerSafetyTimerRef.current = setTimeout(() => {
-          answerSafetyTimerRef.current = null;
-          if (!isPlayingAnswerRef.current || playbackStartedRef.current) return;
-
-          const fallback = answerFallbackRef.current;
-          if (fallback) {
-            console.warn("[Mo] Safety timeout — https answer audio never started. Retrying with data URI fallback.");
-            answerFallbackRef.current = null;   // one retry only
-            setAnswerSource(fallback);
-            armAnswerSafetyTimer();
-            return;
-          }
-
-          console.warn("[Mo] Safety timeout — answer audio never started. Returning to idle. Text reply still visible.");
-          isPlayingAnswerRef.current = false;
-          inflightRef.current = false;
-          setStateSync("idle");
-          transitionPhase("idle", { reason: "playback_safety_timeout_text_fallback" });
-          setAnswerSource(null);
-        }, 8_000);
-      };
-      armAnswerSafetyTimer();
+      playAnswerAudio(answerUri);
 
     } catch (err: any) {
       fetchAbortRef.current = null;
@@ -1061,7 +1080,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       transitionPhase("error", { reason: isTimeout ? "timeout" : "pipeline_exception", message: msg });
       setTimeout(() => setStateSync("idle"), 8000);
     }
-  }, [mode, conversationHistory, memories, tasks, reminders, notes, preferences, autoplay, callbacks, playFillerAsync, transitionPhase]);
+  }, [mode, conversationHistory, memories, tasks, reminders, notes, preferences, autoplay, callbacks, playFillerAsync, transitionPhase, resolveAnswerAudioUri, playAnswerAudio]);
 
   useEffect(() => {
     stopAndProcessRef.current = stopAndProcess;
@@ -1230,6 +1249,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
     toggle,
     cancelVoice,
     resetReply,
+    speakAnswer,
     isIdle: state === "idle",
     isListening: state === "listening",
     isThinking: state === "thinking",

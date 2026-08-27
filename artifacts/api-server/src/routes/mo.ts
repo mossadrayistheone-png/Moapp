@@ -930,8 +930,27 @@ router.post("/mo/chat", async (req: Request, res: Response) => {
 
   try {
     const { reply, toolResult } = await runWithTools(systemPrompt, conversationMessages, maxTokens);
+
+    // ── ElevenLabs TTS for the text-chat reply ────────────────────────────
+    // Mo must speak regardless of whether the user typed or talked. Mirrors
+    // the /mo/voice TTS stage: failure is non-fatal — the text reply above is
+    // already valid and must reach the client even if speech synthesis fails.
+    let audioBase64: string | undefined;
+    let audioUrl: string | undefined;
+    if (reply) {
+      try {
+        const audioResponseBuffer = await textToSpeechBuffer(reply);
+        audioBase64 = audioResponseBuffer.toString("base64");
+        audioUrl = `/api/mo/audio/${cacheAnswerAudio(audioResponseBuffer)}`;
+      } catch (err: any) {
+        req.log.warn({ err: err?.message }, "ElevenLabs TTS failed for /mo/chat — returning text-only response");
+      }
+    }
+
     res.json({
       reply,
+      audioBase64,
+      audioUrl,
       functionCalled: toolResult?.functionCalled,
       reminder: toolResult?.reminder,
       reminderAction: toolResult?.reminderAction,

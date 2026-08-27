@@ -42,7 +42,7 @@ describe("useTextChat", () => {
 
     expect(result.current.chatReply).toBe("Hello from text mode");
     expect(result.current.chatState).toBe("done");
-    expect(onComplete).toHaveBeenCalledWith("hi", "Hello from text mode", expect.any(Object));
+    expect(onComplete).toHaveBeenCalledWith("hi", "Hello from text mode", expect.any(Object), expect.any(Object));
   });
 
   it("resetChat clears a stale reply, error, and state back to idle", async () => {
