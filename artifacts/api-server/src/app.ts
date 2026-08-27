@@ -46,13 +46,15 @@ for (const [filename, url] of Object.entries(APK_REDIRECTS)) {
   app.get(`/${filename}`, (_req, res) => res.redirect(302, url));
 }
 
-// Stable /api/mo/apk shortlink — always redirects to the latest GitHub release.
-// GitHub resolves this to a fresh signed CDN URL on every request, so the link
-// never expires and the phone downloads straight from GitHub's CDN (not through
-// Replit's proxy, which would truncate large streams).
-app.get("/api/mo/apk", (_req, res) => {
-  res.redirect(302, "https://github.com/mossadrayistheone-png/Moapp/releases/download/latest/mo-release-build20.apk");
-});
+// NOTE: /api/mo/apk and /mo/apk are intentionally NOT handled here.
+// They used to be a hardcoded redirect to a stale GitHub release
+// ("mo-release-build20.apk") that pre-dates the current CI pipeline. That
+// hardcoded route was registered before `router` below and therefore always
+// won the match, silently shadowing routes/apk.ts's dynamic handler — every
+// download served build 20 forever, no matter how many newer builds CI
+// uploaded to GCS. The real, always-current handler lives in
+// routes/apk.ts (GET /mo/apk, mounted at both "/" and "/api" below) and
+// redirects to the object-storage URL that CI's upload step just wrote to.
 
 // Serve static assets (APK downloads etc.)
 const staticMiddleware = express.static(path.resolve("public"), {
