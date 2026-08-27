@@ -161,7 +161,7 @@ export default function HomeScreen() {
   );
 
   // ── Single shared voice instance ──
-  const { state, mode, setMode, transcript, liveTranscript, reply, errorMessage, micLevel, toggle } = useVoice({
+  const { state, mode, setMode, transcript, liveTranscript, reply, errorMessage, micLevel, toggle, cancelVoice } = useVoice({
     conversationHistory,
     memories,
     tasks,
@@ -233,7 +233,17 @@ export default function HomeScreen() {
   // ── Sync AI personality with active carousel page ──
   useEffect(() => {
     const targetMode = PAGE_MODE[activePage];
-    if (mode !== targetMode) setMode(targetMode);
+    if (mode !== targetMode) {
+      // A voice turn started under the OLD persona (mid-recording, thinking,
+      // or speaking) must never be allowed to land and answer as the NEW
+      // persona once the user has swiped away. Cancel it cleanly first so
+      // the mode hand-off is unambiguous — no duplicate/late listeners.
+      if (state !== "idle") {
+        console.log("[Mo] mode switch while voice active — cancelling in-flight turn", { from: mode, to: targetMode, state });
+        cancelVoice();
+      }
+      setMode(targetMode);
+    }
     // Reset text chat when mode changes so stale replies don't bleed across modes
     resetChat();
   }, [activePage]); // eslint-disable-line react-hooks/exhaustive-deps

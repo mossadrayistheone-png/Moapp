@@ -58,6 +58,39 @@ export type AssistantState =
   | "thinking"
   | "speaking"
   | "error";
+
+// ── Internal pipeline state machine ──────────────────────────────────────────
+// The UI only ever sees the 5 AssistantState values above (no visual changes).
+// Internally we track a more granular, explicitly-named pipeline phase for
+// tracing/debugging: idle → listening → transcribing → thinking →
+// generating_voice → speaking → idle. Because Mo's server does Whisper → GPT →
+// ElevenLabs as ONE round trip (to minimise voice latency), the client cannot
+// observe transcribing/thinking/generating_voice as independently-timed live
+// states without a streaming response — and faking live progress with guessed
+// timings would violate "no mocked data". Instead: transcribing/thinking/
+// generating_voice are logged in order the instant the response lands, each
+// annotated with its REAL server-measured duration (from `timings` in the
+// response), giving a fully honest, traceable record of where time went and
+// where a failure occurred — without any fake intermediate UI state.
+export type PipelinePhase =
+  | "idle"
+  | "listening"
+  | "transcribing"
+  | "thinking"
+  | "generating_voice"
+  | "speaking"
+  | "error";
+
+const VALID_PHASE_TRANSITIONS: Record<PipelinePhase, PipelinePhase[]> = {
+  idle:             ["listening"],
+  listening:        ["transcribing", "idle", "error"],
+  transcribing:     ["thinking", "idle", "error"],
+  thinking:         ["generating_voice", "idle", "error"],
+  generating_voice: ["speaking", "idle", "error"],
+  speaking:         ["idle", "error"],
+  error:            ["idle", "listening"],
+};
+
 export type AssistantMode = "executive" | "daily" | "luxury";
 export type ResponseLength = "short" | "medium" | "long";
 
@@ -249,6 +282,28 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const fetchAbortRef   = useRef<AbortController | null>(null);
   const stopAndProcessRef = useRef<(() => void) | null>(null);
 
+  // Explicit pipeline phase (see PipelinePhase above) — internal tracing only,
+  // never drives UI. Validated against VALID_PHASE_TRANSITIONS on every change
+  // so an illegal jump (e.g. "listening" → "speaking") is loudly logged instead
+  // of silently happening.
+  const phaseRef = useRef<PipelinePhase>("idle");
+  const transitionPhase = useCallback((next: PipelinePhase, meta?: Record<string, unknown>) => {
+    const prev = phaseRef.current;
+    if (prev === next) return;
+    const allowed = VALID_PHASE_TRANSITIONS[prev]?.includes(next);
+    if (!allowed) {
+      console.warn(`[Mo][phase] INVALID transition ${prev} → ${next}`, meta ?? "");
+    } else {
+      console.log(`[Mo][phase] ${prev} → ${next}`, meta ?? "");
+    }
+    phaseRef.current = next;
+  }, []);
+
+  // Guards the window between "user tapped mic" and "recorder actually armed".
+  // Without this, a fast double-tap during the async permission-request await
+  // could start two concurrent recordings before stateRef flips to "listening".
+  const startingRef = useRef(false);
+
   // VAD polling interval — cleared when recording stops or is interrupted.
   const vadIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -316,9 +371,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
       isPlayingAnswerRef.current = false;
       inflightRef.current = false;
       setStateSync("idle");
+      transitionPhase("idle", { reason: "playback_finished" });
       setAnswerSource(null);
     }
-  }, [answerPlayerStatus.playing]);
+  }, [answerPlayerStatus.playing, transitionPhase]);
 
   // 3. Auto-play when player is loaded and we're waiting to play
   useEffect(() => {
@@ -339,13 +395,26 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
   // ── startRecording ────────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
-    console.log("[Mo] startRecording — state:", stateRef.current, "inflight:", inflightRef.current);
+    console.log("[Mo] startRecording — state:", stateRef.current, "inflight:", inflightRef.current, "starting:", startingRef.current);
+
+    if (startingRef.current) {
+      console.warn("[Mo] startRecording — BLOCKED duplicate submission (start already in progress)");
+      return;
+    }
+    const readyToStart: boolean = stateRef.current === "idle" || stateRef.current === "error";
+    if (!readyToStart) {
+      console.warn("[Mo] startRecording — BLOCKED, not idle/error. state:", stateRef.current);
+      return;
+    }
+    startingRef.current = true;
+
     try {
       const { granted } = await requestRecordingPermissionsAsync();
       console.log("[Mo] mic permission granted:", granted);
       if (!granted) {
         setErrorMessage("Microphone permission denied.");
         setStateSync("error");
+        transitionPhase("error", { reason: "mic_permission_denied" });
         setTimeout(() => setStateSync("idle"), 8000);
         return;
       }
@@ -389,6 +458,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
       setReply("");
       setErrorMessage("");
       setStateSync("listening");
+      transitionPhase("listening");
+      // Recording is now genuinely armed — release the start-mutex so the
+      // NEXT tap (e.g. to stop early) is never blocked by it.
+      startingRef.current = false;
 
       // ── Ambient noise calibration ─────────────────────────────────────────
       // Sample metering during the first VAD_AMBIENT_SAMPLE_MS ms of recording
@@ -571,7 +644,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
       console.error("[Mo] startRecording FAILED:", err);
       setErrorMessage("Could not start recording.");
       setStateSync("error");
+      transitionPhase("error", { reason: "start_recording_failed", err: String(err) });
       setTimeout(() => setStateSync("idle"), 8000);
+    } finally {
+      // Always release the mutex, even on an early return or thrown error,
+      // so a genuinely failed start never permanently blocks the next tap.
+      startingRef.current = false;
     }
   }, []);
 
@@ -632,7 +710,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       return;
     }
     if (inflightRef.current) {
-      console.log("[Mo] stopAndProcess — inflight guard, skipping");
+      console.warn("[Mo] stopAndProcess — BLOCKED duplicate submission (a request is already in flight)");
       return;
     }
 
@@ -652,14 +730,21 @@ export function useVoice(options: UseVoiceOptions = {}) {
       console.log("[Mo] recorder.stop() done — uri:", uri);
 
       if (!uri) {
+        console.warn("[Mo] validation failed — no audio URI after stop()");
         setErrorMessage("No audio captured. Tap to try again.");
         setStateSync("error");
+        transitionPhase("error", { reason: "no_audio_uri" });
         setTimeout(() => setStateSync("idle"), 8_000);
         return;
       }
 
       setMicLevel(0);
       setStateSync("thinking");
+      // Client-observable phase: audio captured, now uploading + awaiting the
+      // server's transcribe→reply→speak pipeline. See the block below (once
+      // the response lands) for the honest, server-timed replay of
+      // transcribing → thinking → generating_voice.
+      transitionPhase("transcribing", { uri });
       inflightRef.current = true;
 
       // Stop any currently playing answer
@@ -802,14 +887,23 @@ export function useVoice(options: UseVoiceOptions = {}) {
           memoryAction?: MemoryActionPayload;
           taskAction?: TaskActionPayload;
           plan?: Omit<DayPlan, "generatedAt">;
+          timings?: { ffmpegMs: number | null; whisperMs: number | null; gptMs: number | null; elevenTtsMs: number | null; totalMs: number };
         }) => {
           const { transcript: tx, reply: rp, audioBase64: audiob64 } = data;
           console.log("[Mo] API — transcript:", JSON.stringify(tx), "reply:", rp?.length ?? 0, "chars, hasAudio:", !!audiob64);
 
+          // ── Honest, server-timed phase replay ─────────────────────────────
+          // The single round trip already ran transcribe → reply → speak on
+          // the server (see stageMs logging in mo.ts). Replay those exact,
+          // real durations through the client's named phases now that we know
+          // them — full traceability without faking a live progress state.
+          transitionPhase("thinking", { stage: "transcribing complete", whisperMs: data.timings?.whisperMs ?? null });
+
           if (!tx?.trim() || !rp) {
-            console.warn("[Mo] Empty transcript or reply");
+            console.warn("[Mo] validation failed — empty transcript or reply", { transcript: tx, replyLen: rp?.length ?? 0 });
             setErrorMessage("Didn't catch that — tap to try again.");
             setStateSync("error");
+            transitionPhase("error", { reason: "empty_transcript_or_reply" });
             setTimeout(() => setStateSync("idle"), 8_000);
             return null;
           }
@@ -830,7 +924,19 @@ export function useVoice(options: UseVoiceOptions = {}) {
           if (data.taskAction)     callbacks?.onTaskAction?.(data.taskAction);
           callbacks?.onTurnComplete?.(tx, rp);
 
-          if (!autoplay || !audiob64) return null;
+          transitionPhase("generating_voice", { gptMs: data.timings?.gptMs ?? null });
+
+          if (!autoplay || !audiob64) {
+            // Text-response fallback: transcript + reply are already set above
+            // and remain visible on screen even though there is no audio to
+            // play (autoplay off, or ElevenLabs failed server-side — see
+            // "ElevenLabs TTS failed" warnings in mo.ts). This is not an
+            // error — the turn completed successfully as text.
+            console.warn("[Mo] No answer audio — falling back to text-only response", {
+              autoplay, hasAudioBase64: !!audiob64, elevenTtsMs: data.timings?.elevenTtsMs ?? null,
+            });
+            return null;
+          }
 
           // ── Answer audio source selection ─────────────────────────────────
           // Android New Architecture's MediaPlayer can silently reject local
@@ -847,6 +953,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
             audioUri = dataUri;
             answerFallbackRef.current = null;
           }
+          console.log("[Mo] stage generating_voice complete", { elevenTtsMs: data.timings?.elevenTtsMs ?? null, totalMs: data.timings?.totalMs ?? null });
           return audioUri;
         });
 
@@ -858,12 +965,15 @@ export function useVoice(options: UseVoiceOptions = {}) {
       if (!inflightRef.current) return;   // user tapped stop while we waited
 
       if (!answerUri) {
-        // Empty transcript / error was already handled inside apiPromise.then().
+        // Empty transcript / error, or successful text-only fallback (no
+        // audio) — both already handled/logged inside apiPromise.then().
         // Always reset inflightRef so future requests aren't blocked. State is
-        // either already "error" (apiPromise returned null early) or needs idle.
+        // either already "error" (validation failed) or needs idle (text
+        // fallback — transcript/reply stay visible on screen as-is).
         inflightRef.current = false;
         if (stateRef.current !== "error") {
           setStateSync("idle");
+          transitionPhase("idle", { reason: "text_fallback_no_audio" });
         }
         return;
       }
@@ -873,6 +983,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
       // Effect #3 above detects isLoaded and calls answerPlayerRef.current.play().
       // Effects #1 and #2 detect playback start and completion.
       console.log("[Mo] Starting answer playback — setting answerSource:", answerUri);
+      transitionPhase("speaking", { audioUri: answerUri });
       isPlayingAnswerRef.current = true;
       playbackStartedRef.current = false;
       setAnswerSource(answerUri);
@@ -902,6 +1013,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
           isPlayingAnswerRef.current = false;
           inflightRef.current = false;
           setStateSync("idle");
+          transitionPhase("idle", { reason: "playback_safety_timeout_text_fallback" });
           setAnswerSource(null);
         }, 8_000);
       };
@@ -926,9 +1038,10 @@ export function useVoice(options: UseVoiceOptions = {}) {
       console.error("[Mo] Voice pipeline error:", err);
       setErrorMessage(msg);
       setStateSync("error");
+      transitionPhase("error", { reason: isTimeout ? "timeout" : "pipeline_exception", message: msg });
       setTimeout(() => setStateSync("idle"), 8000);
     }
-  }, [mode, conversationHistory, memories, tasks, reminders, notes, preferences, autoplay, callbacks, playFillerAsync]);
+  }, [mode, conversationHistory, memories, tasks, reminders, notes, preferences, autoplay, callbacks, playFillerAsync, transitionPhase]);
 
   useEffect(() => {
     stopAndProcessRef.current = stopAndProcess;
@@ -980,10 +1093,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
     }
 
     inflightRef.current = false;
+    startingRef.current = false;
 
     if (resetState) {
       stateRef.current = "idle";
       setState("idle");
+      transitionPhase("idle", { reason: "cleanup" });
     }
   };
 
@@ -1046,10 +1161,27 @@ export function useVoice(options: UseVoiceOptions = {}) {
     }
     inflightRef.current = false;
     setStateSync("idle");
+    transitionPhase("idle", { reason: "stop_speaking" });
+  }, []);
+
+  // ── cancelVoice ───────────────────────────────────────────────────────────
+  // Full hand-off cleanup: stops any active recording/upload/playback and
+  // forces the pipeline back to idle. Used when the carousel switches to a
+  // different mode (persona) — a voice turn that started under the OLD
+  // persona must never be allowed to complete and answer as the NEW one.
+  // Safe to call when already idle (no-op via cleanupRef's own guards).
+  const cancelVoice = useCallback(() => {
+    if (stateRef.current === "idle") return;
+    console.log("[Mo] cancelVoice — forcing pipeline back to idle. was:", stateRef.current, "phase:", phaseRef.current);
+    cleanupRef.current?.(true).catch(() => {});
   }, []);
 
   const toggle = useCallback(() => {
     const s = stateRef.current;
+    if (startingRef.current) {
+      console.warn("[Mo] toggle — BLOCKED, start already in progress");
+      return;
+    }
     if (s === "idle" || s === "error") startRecording();
     else if (s === "listening") stopAndProcess();
     else if (s === "speaking") stopSpeaking();
@@ -1065,6 +1197,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
     errorMessage,
     micLevel,
     toggle,
+    cancelVoice,
     isIdle: state === "idle",
     isListening: state === "listening",
     isThinking: state === "thinking",
