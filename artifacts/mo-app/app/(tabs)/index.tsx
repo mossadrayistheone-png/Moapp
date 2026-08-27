@@ -28,7 +28,7 @@ import { LuxuryScreen } from "@/components/modes/LuxuryScreen";
 import { useApp } from "@/context/AppContext";
 import { useNotes } from "@/hooks/use-notes";
 import { useReminders } from "@/hooks/use-reminders";
-import { guardTextSubmit, guardVoiceToggle } from "@/hooks/use-reply-masking-guard";
+import { guardModeSwitch, guardTextSubmit, guardVoiceToggle } from "@/hooks/use-reply-masking-guard";
 import { useTextChat } from "@/hooks/use-text-chat";
 import {
   useVoice,
@@ -252,21 +252,22 @@ export default function HomeScreen() {
   }, []);
 
   // ── Sync AI personality with active carousel page ──
+  // guardModeSwitch cancels any in-flight voice turn AND clears both sides'
+  // reply/transcript state (not just a turn still in flight — a turn that
+  // already completed under the OLD persona too), so neither a late-arriving
+  // nor an already-landed answer can bleed into the new persona's screen via
+  // the shared `reply || chatReply` fallback each mode screen renders.
   useEffect(() => {
     const targetMode = PAGE_MODE[activePage];
-    if (mode !== targetMode) {
-      // A voice turn started under the OLD persona (mid-recording, thinking,
-      // or speaking) must never be allowed to land and answer as the NEW
-      // persona once the user has swiped away. Cancel it cleanly first so
-      // the mode hand-off is unambiguous — no duplicate/late listeners.
-      if (state !== "idle") {
-        console.log("[Mo] mode switch while voice active — cancelling in-flight turn", { from: mode, to: targetMode, state });
-        cancelVoice();
-      }
-      setMode(targetMode);
-    }
-    // Reset text chat when mode changes so stale replies don't bleed across modes
-    resetChat();
+    guardModeSwitch({
+      currentMode: mode,
+      targetMode,
+      voiceState: state,
+      cancelVoice,
+      resetReply,
+      setMode,
+      resetChat,
+    });
   }, [activePage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Handle page swipe completion ──

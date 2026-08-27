@@ -145,6 +145,21 @@ export function useTextChat({ onComplete }: UseTextChatOptions): UseTextChatRetu
         }
 
         const data = await response.json();
+
+        // The response may have fully arrived (fetch resolved, json()
+        // parsed) AFTER resetChat()/a fresh submitText() already aborted
+        // this turn — e.g. the user switched mode or started a new turn
+        // while the response body was still being read. abort() sets
+        // signal.aborted synchronously regardless of whether the underlying
+        // fetch/json promise had already settled, so this is the only
+        // reliable way to catch that case; checking `err.name ===
+        // "AbortError"` in the catch below only works while the fetch
+        // promise itself is still pending.
+        if (controller.signal.aborted) {
+          console.log("[Mo] chat response arrived after cancel — discarding stale turn (no state mutated)");
+          return;
+        }
+
         const reply: string = data.reply ?? "";
 
         setChatReply(reply);
@@ -164,7 +179,7 @@ export function useTextChat({ onComplete }: UseTextChatOptions): UseTextChatRetu
         // (see mo.ts) — that's a graceful text-only fallback, not an error.
         onComplete(text, reply, tools, { audioBase64: data.audioBase64, audioUrl: data.audioUrl });
       } catch (err: any) {
-        if (err?.name === "AbortError") return;
+        if (err?.name === "AbortError" || controller.signal.aborted) return;
         const msg = err?.message ?? "Failed to get a response. Please try again.";
         setChatError(msg);
         setChatState("error");

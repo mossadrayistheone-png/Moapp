@@ -294,6 +294,18 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const fetchAbortRef   = useRef<AbortController | null>(null);
   const stopAndProcessRef = useRef<(() => void) | null>(null);
 
+  // Monotonic per-turn ownership token. Incremented (a) at the moment a turn
+  // is claimed in stopAndProcess, and (b) on every cleanup/cancel. A turn's
+  // own async continuation captures its token as `myTurn` and re-checks it
+  // after EVERY await, not just around the fetch: cancelVoice() (e.g. a mode
+  // switch) has nothing to abort during recorder.stop()/file-read/setAudioMode
+  // — those awaits don't touch fetchAbortRef at all — so an AbortController
+  // alone can't stop a turn that's cancelled before it ever creates one.
+  // Without this, a turn cancelled mid-shutdown-await would still resume,
+  // send its request under the OLD mode, and land a reply attributed to the
+  // NEW one once the user has already switched.
+  const activeTurnRef = useRef(0);
+
   // Explicit pipeline phase (see PipelinePhase above) — internal tracing only,
   // never drives UI. Validated against VALID_PHASE_TRANSITIONS on every change
   // so an illegal jump (e.g. "listening" → "speaking") is loudly logged instead
@@ -806,6 +818,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
     // caller ever proceeds.
     recordingActive.current = false;
     inflightRef.current = true;
+    // Claim ownership of this turn atomically, in the same synchronous
+    // window as the two flags above.
+    activeTurnRef.current += 1;
+    const myTurn = activeTurnRef.current;
+    const isStaleTurn = () => activeTurnRef.current !== myTurn;
 
     let fetchController: AbortController | null = null;
 
@@ -818,6 +835,15 @@ export function useVoice(options: UseVoiceOptions = {}) {
       } catch (stopErr) {
         console.warn("[Mo] recorder.stop() threw (likely already stopped by forDuration):", stopErr);
       }
+
+      // A cancel (e.g. a mode switch) during the await above has nothing to
+      // abort yet — no fetch has been created — so it can only invalidate us
+      // via activeTurnRef. Bail out before touching any more shared state.
+      if (isStaleTurn()) {
+        console.log("[Mo] stopAndProcess — turn invalidated during recorder.stop(), discarding");
+        return;
+      }
+
       const uri = recorder.uri;
       console.log("[Mo] recorder.stop() done — uri:", uri);
 
@@ -855,6 +881,11 @@ export function useVoice(options: UseVoiceOptions = {}) {
         fillerSoundRef.current = null;
       }
 
+      if (isStaleTurn()) {
+        console.log("[Mo] stopAndProcess — turn invalidated while stopping leftover filler, discarding");
+        return;
+      }
+
       // Read audio file + switch audio mode in parallel
       const [audioBase64] = await Promise.all([
         Platform.OS === "web"
@@ -864,6 +895,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
           ? setAudioModeEA({ allowsRecording: false, playsInSilentMode: true })
           : Promise.resolve(),
       ]);
+
+      // Another cancellation window: nothing had a fetch to abort yet.
+      if (isStaleTurn()) {
+        console.log("[Mo] stopAndProcess — turn invalidated during file read, discarding (no request sent)");
+        return;
+      }
 
       const audioFormat =
         Platform.OS === "web" ? "webm" : "aac";
@@ -981,6 +1018,22 @@ export function useVoice(options: UseVoiceOptions = {}) {
           plan?: Omit<DayPlan, "generatedAt">;
           timings?: { ffmpegMs: number | null; whisperMs: number | null; gptMs: number | null; elevenTtsMs: number | null; totalMs: number };
         }) => {
+          // The response may have fully arrived (fetch resolved, json()
+          // parsed) AFTER cancelVoice() already aborted this turn — e.g. the
+          // user swiped to a different mode while the response body was
+          // still being read. AbortController.abort() sets signal.aborted
+          // synchronously regardless of whether the underlying fetch/json
+          // promise had already settled, so checking it here — BEFORE any
+          // state mutation or callback fires — is the only way to catch that
+          // case. `inflightRef.current` is checked too, but only after
+          // `Promise.all` below resolves, which is too late: this .then()
+          // callback runs (and would otherwise mutate state) the instant the
+          // response lands, independent of when Promise.all is awaited.
+          if (fetchController!.signal.aborted || isStaleTurn()) {
+            console.log("[Mo] API response arrived after cancel — discarding stale turn (no state mutated)");
+            return null;
+          }
+
           const { transcript: tx, reply: rp, audioBase64: audiob64 } = data;
           console.log("[Mo] API — transcript:", JSON.stringify(tx), "reply:", rp?.length ?? 0, "chars, hasAudio:", !!audiob64);
 
@@ -1090,6 +1143,12 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const cleanupRef = useRef<((resetState: boolean) => Promise<void>) | undefined>(undefined);
   cleanupRef.current = async (resetState: boolean) => {
     console.log("[Mo] cleanup — resetState:", resetState);
+
+    // Invalidate any turn currently mid-flight in stopAndProcess. This is the
+    // ONLY thing that can stop it during the recorder.stop()/file-read/
+    // setAudioMode awaits, before it has created a fetchController for
+    // fetchAbortRef.current.abort() (below) to actually cancel.
+    activeTurnRef.current += 1;
 
     // Stop VAD polling first so it can't fire after recorder.stop()
     if (vadIntervalRef.current) {

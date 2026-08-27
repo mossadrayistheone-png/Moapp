@@ -4,11 +4,11 @@
  * side (voice or text) still holds content from a PREVIOUS turn keeps
  * winning the `||` and masks a brand-new answer on the other side.
  *
- * These two guards are the fix, factored out of app/(tabs)/index.tsx so they
+ * These guards are the fix, factored out of app/(tabs)/index.tsx so they
  * can be unit-tested directly (see __tests__/use-reply-masking-guard.test.ts)
  * instead of only being exercised indirectly through the screen components.
  */
-import type { AssistantState } from "@/hooks/use-voice";
+import type { AssistantMode, AssistantState } from "@/hooks/use-voice";
 
 /**
  * Wraps the mic toggle: clears a stale TEXT reply before a fresh voice turn
@@ -51,4 +51,43 @@ export function guardTextSubmit(params: {
   params.cancelVoice();
   params.resetReply();
   params.submitText();
+}
+
+/**
+ * Wraps a carousel mode switch (Daily/Executive/Luxury): cancels any
+ * in-flight voice turn, clears BOTH sides' displayed reply/transcript state,
+ * then commits the new mode.
+ *
+ * Cancelling alone is not enough. cancelVoice() aborts the in-flight fetch
+ * (via fetchAbortRef) so its success handler can never fire late and repopulate
+ * `reply`, but it does NOT clear an already-populated `reply`/`transcript` from
+ * a turn that already completed under the OLD persona before the swipe. Since
+ * useVoice/useTextChat are single instances shared across all three mode
+ * screens, that leftover state is exactly what each screen's `reply ||
+ * chatReply` fallback would render — silently attributing the previous
+ * persona's answer to the new one. resetReply() (voice) and resetChat()
+ * (text) must run on every mode change, not just while a turn is in flight,
+ * to guarantee a fresh persona always starts from a blank slate.
+ */
+export function guardModeSwitch(params: {
+  currentMode: AssistantMode;
+  targetMode: AssistantMode;
+  voiceState: AssistantState;
+  cancelVoice: () => void;
+  resetReply: () => void;
+  setMode: (mode: AssistantMode) => void;
+  resetChat: () => void;
+}): void {
+  const { currentMode, targetMode, voiceState, cancelVoice, resetReply, setMode, resetChat } = params;
+  if (currentMode !== targetMode) {
+    // A voice turn started under the OLD persona (mid-recording, thinking, or
+    // speaking) must never be allowed to land and answer as the NEW persona
+    // once the user has swiped away.
+    if (voiceState !== "idle") cancelVoice();
+    resetReply();
+    setMode(targetMode);
+  }
+  // Reset text chat on every mode change (even if a text turn already
+  // completed) so a finished-but-stale reply can't bleed into the new mode.
+  resetChat();
 }
