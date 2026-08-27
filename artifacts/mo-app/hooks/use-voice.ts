@@ -723,6 +723,18 @@ export function useVoice(options: UseVoiceOptions = {}) {
       return;
     }
 
+    // Claim this turn SYNCHRONOUSLY, before the first await below. VAD silence
+    // detection, the natural forDuration finish, and a manual button tap can
+    // all call stopAndProcess() within the same tick. Without this, two calls
+    // both read recordingActive/inflightRef as false (they're only flipped to
+    // true after `await recorder.stop()` resolves), both slip past the guards
+    // above, and both play their own random filler clip — the two overlapping
+    // "transitional phrases" the user hears. Setting both refs here, before
+    // any `await`, makes the guard check-and-set atomic so only the first
+    // caller ever proceeds.
+    recordingActive.current = false;
+    inflightRef.current = true;
+
     let fetchController: AbortController | null = null;
 
     try {
@@ -734,7 +746,6 @@ export function useVoice(options: UseVoiceOptions = {}) {
       } catch (stopErr) {
         console.warn("[Mo] recorder.stop() threw (likely already stopped by forDuration):", stopErr);
       }
-      recordingActive.current = false;
       const uri = recorder.uri;
       console.log("[Mo] recorder.stop() done — uri:", uri);
 
@@ -744,6 +755,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
         setStateSync("error");
         transitionPhase("error", { reason: "no_audio_uri" });
         setTimeout(() => setStateSync("idle"), 8_000);
+        inflightRef.current = false;   // release the claim — no request was ever sent
         return;
       }
 
@@ -754,7 +766,6 @@ export function useVoice(options: UseVoiceOptions = {}) {
       // the response lands) for the honest, server-timed replay of
       // transcribing → thinking → generating_voice.
       transitionPhase("transcribing", { uri });
-      inflightRef.current = true;
 
       // Stop any currently playing answer
       if (answerPlayerRef.current.playing) {
