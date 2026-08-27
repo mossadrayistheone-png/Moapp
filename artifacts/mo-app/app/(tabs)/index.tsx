@@ -213,11 +213,14 @@ export default function HomeScreen() {
   const makeSubmitHandler = useCallback(
     (pageMode: AssistantMode) => (text: string) => {
       const ctx = ctxRef.current;
-      // guardTextSubmit clears any leftover voice transcript/reply first —
-      // otherwise the `reply || chatReply` / `transcript || liveTranscript`
-      // fallbacks in each screen keep showing the old voice turn's content,
+      // guardTextSubmit cancels any in-flight voice turn and clears any
+      // leftover voice transcript/reply first — otherwise the
+      // `reply || chatReply` / `transcript || liveTranscript` fallbacks in
+      // each screen keep showing the old voice turn's content (either
+      // already-displayed, or arriving late once its API call resolves),
       // making a fresh text submission look like it did nothing.
       guardTextSubmit({
+        cancelVoice,
         resetReply,
         submitText: () =>
           submitText(text, {
@@ -236,7 +239,7 @@ export default function HomeScreen() {
           }),
       });
     },
-    [submitText, resetReply]
+    [submitText, resetReply, cancelVoice]
   );
 
   const submitDaily     = useCallback(makeSubmitHandler("daily"),     [makeSubmitHandler]);

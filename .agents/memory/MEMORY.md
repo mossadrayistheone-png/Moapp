@@ -17,3 +17,4 @@
 - [Jest testing for Mo's voice/text hooks](jest-testing-mo-hooks.md) — jest-expo setup, autoplay:false shortcut for useVoice, why orchestration logic must be extracted to be testable.
 - [Mo text-chat TTS reuses voice-pipeline playback](mo-text-chat-tts.md) — /mo/chat now speaks via the same shared playback path as /mo/voice; any new speaking endpoint should reuse it too.
 - [Android/Play Store readiness](android-play-readiness.md) — CI regenerates android/ from app.json via expo prebuild --clean; verify GitHub repo secrets live, don't trust old notes; RevenueCat/EXPO_PUBLIC_* env vars need explicit CI wiring.
+- [Cross-pipeline reply masking requires cancelling, not just clearing](voice-text-race-guard.md) — switching between two async pipelines that share a displayed-result fallback must abort the other's in-flight request, or a late response re-masks the new answer.

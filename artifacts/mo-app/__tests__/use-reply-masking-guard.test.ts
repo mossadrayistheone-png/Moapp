@@ -39,17 +39,23 @@ describe("guardVoiceToggle", () => {
 });
 
 describe("guardTextSubmit", () => {
-  it("clears the stale voice reply before submitting the new text turn", () => {
+  it("cancels any in-flight voice turn and clears the stale voice reply before submitting the new text turn", () => {
+    const cancelVoice = jest.fn();
     const resetReply = jest.fn();
     const submitText = jest.fn();
     const calls: string[] = [];
+    cancelVoice.mockImplementation(() => calls.push("cancelVoice"));
     resetReply.mockImplementation(() => calls.push("resetReply"));
     submitText.mockImplementation(() => calls.push("submitText"));
 
-    guardTextSubmit({ resetReply, submitText });
+    guardTextSubmit({ cancelVoice, resetReply, submitText });
 
+    expect(cancelVoice).toHaveBeenCalledTimes(1);
     expect(resetReply).toHaveBeenCalledTimes(1);
     expect(submitText).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual(["resetReply", "submitText"]); // reset MUST happen first
+    // cancelVoice MUST happen first (aborts any in-flight voice API request
+    // before it can later resolve and overwrite the fresh text reply), then
+    // resetReply, then the new text turn is submitted.
+    expect(calls).toEqual(["cancelVoice", "resetReply", "submitText"]);
   });
 });
