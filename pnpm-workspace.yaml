@@ -37,10 +37,29 @@ minimumReleaseAgeExclude:
   - stripe-replit-sync
 
 onlyBuiltDependencies:
+  - '@pnpm/exe'
   - '@swc/core'
   - esbuild
   - msw
   - unrs-resolver
+
+# Modern (pnpm v11+) equivalent of onlyBuiltDependencies above. pnpm v11+
+# renamed the build-script allowlist mechanism (onlyBuiltDependencies is no
+# longer read: https://pnpm.io/settings#allowbuilds), which is what
+# triggered ERR_PNPM_IGNORED_BUILDS on Render's build image using a newer
+# pnpm than this workspace's pinned 10.26.1. Both lists are kept in sync so
+# the install works the same way on pnpm v10 (here) and v11+ (Render).
+# Every entry was reviewed: each needs its install/postinstall script to
+# either compile a native binding or vendor a generated file it needs at
+# runtime (swc, esbuild, msw's browser mock worker, unrs-resolver's native
+# binding, pnpm's own bundled exe wrapper). No other package's build
+# script is approved.
+allowBuilds:
+  '@pnpm/exe': true
+  '@swc/core': true
+  esbuild: true
+  msw: true
+  unrs-resolver: true
 
 overrides:
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0

@@ -161,7 +161,7 @@ export default function HomeScreen() {
   );
 
   // ── Single shared voice instance ──
-  const { state, mode, setMode, transcript, liveTranscript, reply, errorMessage, micLevel, toggle, cancelVoice } = useVoice({
+  const { state, mode, setMode, transcript, liveTranscript, reply, errorMessage, micLevel, toggle, cancelVoice, resetReply } = useVoice({
     conversationHistory,
     memories,
     tasks,
@@ -199,9 +199,21 @@ export default function HomeScreen() {
     ctxRef.current = { conversationHistory, memories, tasks, reminders, notes, preferences };
   });
 
+  // ── Voice toggle wrapper: clear a stale chat reply when a fresh voice
+  //    turn starts, so it can't mask the new voice answer once it lands ──
+  const handleToggle = useCallback(() => {
+    if (state === "idle" || state === "error") resetChat();
+    toggle();
+  }, [state, resetChat, toggle]);
+
   // ── Per-mode submit handlers ──
   const makeSubmitHandler = useCallback(
     (pageMode: AssistantMode) => (text: string) => {
+      // Clear any leftover voice transcript/reply first — otherwise the
+      // `reply || chatReply` / `transcript || liveTranscript` fallbacks in
+      // each screen keep showing the old voice turn's content, making a
+      // fresh text submission look like it did nothing.
+      resetReply();
       const ctx = ctxRef.current;
       submitText(text, {
         mode: pageMode,
@@ -268,7 +280,7 @@ export default function HomeScreen() {
     reply,
     errorMessage,
     micLevel,
-    onToggle:      toggle,
+    onToggle:      handleToggle,
     onRetry:       handleRetry,
     chatState,
     chatReply,

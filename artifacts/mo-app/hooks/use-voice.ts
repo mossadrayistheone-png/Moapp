@@ -1207,6 +1207,17 @@ export function useVoice(options: UseVoiceOptions = {}) {
     else if (s === "speaking") stopSpeaking();
   }, [startRecording, stopAndProcess, stopSpeaking]);
 
+  // Clears any leftover voice transcript/reply from a previous turn. Screens
+  // render `reply || chatReply` and `transcript || liveTranscript`, so a
+  // stale voice reply otherwise masks a brand-new text-chat reply (and vice
+  // versa) — the UI silently keeps showing the old answer, looking exactly
+  // like "nothing happened" when the user switches from voice to typing.
+  const resetReply = useCallback(() => {
+    setTranscript("");
+    setLiveTranscript("");
+    setReply("");
+  }, []);
+
   return {
     state,
     mode,
@@ -1218,6 +1229,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
     micLevel,
     toggle,
     cancelVoice,
+    resetReply,
     isIdle: state === "idle",
     isListening: state === "listening",
     isThinking: state === "thinking",
