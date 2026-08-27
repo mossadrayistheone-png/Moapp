@@ -272,7 +272,7 @@ export const VoiceRequestMode = {
 } as const;
 
 export interface VoiceRequest {
-  /** Base64-encoded audio file */
+  /** Base64-encoded audio file (ADTS AAC on iOS and Android, WebM on web) */
   audio: string;
   format?: VoiceRequestFormat;
   mode?: VoiceRequestMode;

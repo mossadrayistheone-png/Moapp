@@ -181,7 +181,11 @@ export const moVoiceBodyModeDefault = `executive`;
 export const moVoiceBodyPreferencesResponseLengthDefault = `medium`;
 
 export const MoVoiceBody = zod.object({
-  audio: zod.string().describe("Base64-encoded audio file"),
+  audio: zod
+    .string()
+    .describe(
+      "Base64-encoded audio file (ADTS AAC on iOS and Android, WebM on web)",
+    ),
   format: zod
     .enum(["m4a", "mp4", "wav", "caf", "aac", "webm"])
     .default(moVoiceBodyFormatDefault),

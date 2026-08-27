@@ -15,7 +15,7 @@ import type { VoiceRequestFormat } from "./voiceRequestFormat";
 import type { VoiceRequestMode } from "./voiceRequestMode";
 
 export interface VoiceRequest {
-  /** Base64-encoded audio file */
+  /** Base64-encoded audio file (ADTS AAC on iOS and Android, WebM on web) */
   audio: string;
   format?: VoiceRequestFormat;
   mode?: VoiceRequestMode;

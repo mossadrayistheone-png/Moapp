@@ -26,6 +26,10 @@ author = "agent"
 task = "workflow.run"
 args = "apps/web: Web Frontend"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "api-spec-drift"
+
 [[workflows.workflow]]
 name = "apps/web: Web Frontend"
 author = "agent"
@@ -36,6 +40,17 @@ outputType = "webview"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd apps/web && PORT=3000 pnpm run dev"
+
+[[workflows.workflow]]
+name = "api-spec-drift"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash lib/api-spec/check-drift.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
 
 [agent]
 stack = "PNPM_WORKSPACE"
